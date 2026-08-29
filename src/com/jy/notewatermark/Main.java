@@ -1,5 +1,8 @@
 package com.jy.notewatermark;
 
+import android.content.Context;
+import android.database.Cursor;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.ByteArrayOutputStream;
@@ -31,8 +34,8 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
  * hiding logo_ll keeps the watermark out of the exported picture as well as out
  * of the preview.
  *
- * Custom text: put the text you want in one of CONFIG_PATHS. An absent, empty
- * or blank file means "remove the watermark completely".
+ * Settings are edited in the module's launcher activity and read through a
+ * read-only provider. The old watermark.txt files remain as a fallback.
  */
 public class Main implements IXposedHookLoadPackage {
 
@@ -92,25 +95,38 @@ public class Main implements IXposedHookLoadPackage {
     }
 
     private static void apply(Object activity, String from) {
-        String custom = readCustomText();
+        Config config = readConfig(activity);
+        String custom = config.watermarkText;
 
         Object logoLl = field(activity, "mLogoLinearLayout");
+        Object line = field(activity, "mLine");
         Object waterMark = field(activity, "mWaterMark");
         Object shareLogo = field(activity, "mShareLogo");
         Object shareLogoOriginal = field(activity, "mShareLogoOriginal");
 
-        if (custom == null) {
+        if (custom.length() == 0 && !config.keepBlankSpace) {
             // Hide the whole row: the divider line and both text views live inside it,
             // so no empty gap is left at the bottom of the picture.
             setVisibility(logoLl, 8);
+            setVisibility(line, 8);
             setVisibility(waterMark, 8);
             setVisibility(shareLogo, 8);
             setVisibility(shareLogoOriginal, 8);
             XposedBridge.log(TAG + from + ": watermark removed");
+        } else if (custom.length() == 0) {
+            // INVISIBLE keeps the original measured watermark row (roughly two text
+            // lines) as clean bottom padding without changing the note itself.
+            setVisibility(logoLl, 0);
+            setVisibility(line, 4);
+            setVisibility(waterMark, 4);
+            setVisibility(shareLogo, 4);
+            setVisibility(shareLogoOriginal, 4);
+            XposedBridge.log(TAG + from + ": blank watermark spacing kept");
         } else {
             // "ColorOS" half goes away, the app-name half carries the custom text.
             setVisibility(waterMark, 8);
             setVisibility(logoLl, 0);
+            setVisibility(line, 0);
             if (shareLogo != null) {
                 setText(shareLogo, custom);
                 setVisibility(shareLogo, 0);
@@ -119,12 +135,40 @@ public class Main implements IXposedHookLoadPackage {
                 setText(shareLogoOriginal, custom);
                 setVisibility(shareLogoOriginal, 0);
             }
-            XposedBridge.log(TAG + from + ": watermark replaced with \"" + custom + "\"");
+            XposedBridge.log(TAG + from + ": custom watermark applied");
         }
     }
 
-    /** Returns the custom watermark text, or null when the watermark should just go away. */
-    private static String readCustomText() {
+    private static Config readConfig(Object activity) {
+        if (activity instanceof Context) {
+            Cursor cursor = null;
+            try {
+                cursor = ((Context) activity).getContentResolver().query(
+                        ConfigContract.URI, null, null, null, null);
+                if (cursor != null && cursor.moveToFirst()) {
+                    int textColumn = cursor.getColumnIndex(
+                            ConfigContract.COLUMN_WATERMARK_TEXT);
+                    int spaceColumn = cursor.getColumnIndex(
+                            ConfigContract.COLUMN_KEEP_BLANK_SPACE);
+                    String text = textColumn >= 0 ? cursor.getString(textColumn) : "";
+                    boolean keepSpace = spaceColumn < 0 || cursor.getInt(spaceColumn) != 0;
+                    return new Config(text == null ? "" : text.trim(), keepSpace);
+                }
+            } catch (Throwable t) {
+                XposedBridge.log(TAG + "could not read settings provider: " + t);
+            } finally {
+                if (cursor != null) {
+                    cursor.close();
+                }
+            }
+        }
+
+        // Compatibility fallback for old installs and frameworks that block the
+        // exported settings provider.
+        return new Config(readLegacyCustomText(), true);
+    }
+
+    private static String readLegacyCustomText() {
         for (String path : CONFIG_PATHS) {
             try {
                 File f = new File(path);
@@ -155,7 +199,17 @@ public class Main implements IXposedHookLoadPackage {
                 // unreadable config is not an error - fall through to "remove"
             }
         }
-        return null;
+        return "";
+    }
+
+    private static final class Config {
+        final String watermarkText;
+        final boolean keepBlankSpace;
+
+        Config(String watermarkText, boolean keepBlankSpace) {
+            this.watermarkText = watermarkText;
+            this.keepBlankSpace = keepBlankSpace;
+        }
     }
 
     private static Object field(Object obj, String name) {
