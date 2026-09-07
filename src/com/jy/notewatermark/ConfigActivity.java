@@ -1,7 +1,9 @@
 package com.jy.notewatermark;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.database.Cursor;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.text.InputFilter;
@@ -20,6 +22,8 @@ public final class ConfigActivity extends Activity {
     private EditText watermarkInput;
     private Switch keepBlankSpaceSwitch;
     private TextView status;
+    private Button exportButton;
+    private TextView exportStatus;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -112,11 +116,111 @@ public final class ConfigActivity extends Activity {
         content.addView(status, statusParams);
         updateStatus();
 
+        TextView exportTitle = text("导出便签", 16, true);
+        LinearLayout.LayoutParams exportTitleParams = matchWrap();
+        exportTitleParams.topMargin = dp(36);
+        content.addView(exportTitle, exportTitleParams);
+
+        TextView exportHint = text(
+                "把全部便签按分类整理成目录，打包成一个 zip 放进「下载」文件夹。"
+                        + "加密便签不会被导出。",
+                13, false);
+        exportHint.setTextColor(Color.GRAY);
+        LinearLayout.LayoutParams exportHintParams = matchWrap();
+        exportHintParams.topMargin = dp(6);
+        content.addView(exportHint, exportHintParams);
+
+        exportButton = new Button(this);
+        exportButton.setText("一键导出全部便签");
+        exportButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                startExport();
+            }
+        });
+        LinearLayout.LayoutParams exportParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(52));
+        exportParams.topMargin = dp(12);
+        content.addView(exportButton, exportParams);
+
+        exportStatus = text("", 13, false);
+        exportStatus.setTextColor(Color.GRAY);
+        LinearLayout.LayoutParams exportStatusParams = matchWrap();
+        exportStatusParams.topMargin = dp(8);
+        content.addView(exportStatus, exportStatusParams);
+
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.addView(content, new ScrollView.LayoutParams(
                 ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
         setContentView(scroll);
+    }
+
+    /**
+     * The notes live in the Notes app's private database, so the work happens in
+     * the injected hook. Querying the Notes app's exported provider both starts
+     * that process and brings the result straight back.
+     */
+    private void startExport() {
+        exportButton.setEnabled(false);
+        exportStatus.setText("正在导出…");
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final String message = exportThroughNotes();
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        exportButton.setEnabled(true);
+                        exportStatus.setText(message);
+                        Toast.makeText(ConfigActivity.this, message, Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+        }, "note-watermark-export").start();
+    }
+
+    private String exportThroughNotes() {
+        Cursor cursor = null;
+        try {
+            cursor = getContentResolver().query(
+                    ConfigContract.EXPORT_URI, null, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int column = cursor.getColumnIndex(ConfigContract.COLUMN_EXPORT_MESSAGE);
+                if (column >= 0) {
+                    return cursor.getString(column);
+                }
+            }
+        } catch (Throwable t) {
+            // fall through to the slower route below
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+        return requestExportOnNextStart();
+    }
+
+    /**
+     * Nothing answered, which means the module is not active in the Notes app or
+     * that app refuses the query. Leave the request behind and open the Notes
+     * app: the hook picks it up as soon as the process starts.
+     */
+    private String requestExportOnNextStart() {
+        getSharedPreferences(ConfigContract.PREFS, 0).edit()
+                .putLong(ConfigContract.KEY_EXPORT_REQUEST, System.currentTimeMillis())
+                .apply();
+        Intent intent = getPackageManager().getLaunchIntentForPackage(ConfigContract.NOTE_PKG);
+        if (intent == null) {
+            return "导出失败：没有找到便签应用";
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(intent);
+        } catch (Throwable t) {
+            return "导出失败：无法打开便签应用（" + t + "）";
+        }
+        return "正在打开便签完成导出，请留意便签里的提示";
     }
 
     private void save() {

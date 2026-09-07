@@ -9,7 +9,9 @@ AAPT=$BT/aapt
 ZIPALIGN=$BT/zipalign
 R8=$R/libs/r8.jar
 FRAMEWORK=/system/framework/framework-res.apk
-KS=$R/build/note-watermark.keystore
+# Kept outside build/ so wiping build output cannot destroy the signing key:
+# losing it forces every user of the module to uninstall and reinstall.
+KS=$R/keystore/note-watermark.keystore
 OUT=$R/build
 APK_UNSIGNED=$OUT/note-watermark.unsigned.apk
 APK=$OUT/NoteWatermark.apk
@@ -41,6 +43,7 @@ $AAPT package -f -M $R/AndroidManifest.xml -I $FRAMEWORK -A $R/assets -F $APK_UN
 ( cd $OUT/dex && $AAPT add $APK_UNSIGNED classes.dex >/dev/null )
 
 echo "== 4. keystore (generate once) =="
+mkdir -p $(dirname $KS)
 if [ ! -f $KS ]; then
   keytool -genkeypair -keystore $KS -alias notewm -storepass notewm123 -keypass notewm123 \
     -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=NoteWatermark" >/dev/null 2>&1

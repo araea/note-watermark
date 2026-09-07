@@ -26,10 +26,12 @@ public final class ConfigProvider extends ContentProvider {
         MatrixCursor cursor = new MatrixCursor(new String[] {
                 ConfigContract.COLUMN_WATERMARK_TEXT,
                 ConfigContract.COLUMN_KEEP_BLANK_SPACE,
+                ConfigContract.COLUMN_EXPORT_REQUEST,
         });
         cursor.addRow(new Object[] {
                 prefs.getString(ConfigContract.KEY_WATERMARK_TEXT, ""),
                 prefs.getBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, true) ? 1 : 0,
+                prefs.getLong(ConfigContract.KEY_EXPORT_REQUEST, 0L),
         });
         return cursor;
     }

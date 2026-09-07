@@ -1,7 +1,18 @@
 package com.jy.notewatermark;
 
+import android.app.Application;
+import android.app.Instrumentation;
+import android.content.ContentProvider;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.database.Cursor;
+import android.database.MatrixCursor;
+import android.net.Uri;
+import android.os.Binder;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Process;
+import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -36,12 +47,20 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
  *
  * Settings are edited in the module's launcher activity and read through a
  * read-only provider. The old watermark.txt files remain as a fallback.
+ *
+ * The same injection also carries the one-tap note export: the module UI cannot
+ * read the Notes database, but code running inside the Notes process can, so the
+ * export is triggered from here and written by {@link NoteExporter}.
  */
 public class Main implements IXposedHookLoadPackage {
 
     private static final String TAG = "[NoteWatermark] ";
     private static final String TARGET_PKG = "com.coloros.note";
     private static final String TARGET_CLASS = "com.nearme.note.activity.edit.SaveImageAndShare";
+    /** Exported, permission-free provider of the Notes app; see AndroidManifest. */
+    private static final String BACKUP_PROVIDER =
+            "com.oplus.migrate.backuprestore.NoteBackupRestoreProvider";
+    private static final String MODULE_PKG = "com.jy.notewatermark";
 
     private static final String[] CONFIG_PATHS = {
         "/sdcard/Android/data/com.coloros.note/files/watermark.txt",
@@ -69,6 +88,9 @@ public class Main implements IXposedHookLoadPackage {
             XposedBridge.log(TAG + "could not hook setLogo(): " + t);
         }
 
+        hookExportTrigger(lpparam);
+        hookPendingExport();
+
         // Safety net: run again just before the bitmap is drawn, in case the app
         // re-shows the views after setLogo() (e.g. on a skin change).
         try {
@@ -84,6 +106,151 @@ public class Main implements IXposedHookLoadPackage {
         } catch (Throwable t) {
             XposedBridge.log(TAG + "could not hook createImageFile(): " + t);
         }
+    }
+
+    /**
+     * The module settings screen asks for an export by querying a made-up path on
+     * the Notes app's own exported provider. Answering it here means the export
+     * runs in the process that can read the notes, and that a query also starts
+     * the Notes process when it is not running.
+     */
+    private static void hookExportTrigger(XC_LoadPackage.LoadPackageParam lpparam) {
+        try {
+            XposedHelpers.findAndHookMethod(BACKUP_PROVIDER, lpparam.classLoader, "query",
+                    Uri.class, String[].class, String.class, String[].class, String.class,
+                    new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                            Uri uri = (Uri) param.args[0];
+                            if (uri == null || !ConfigContract.EXPORT_SEGMENT
+                                    .equals(uri.getLastPathSegment())) {
+                                return;
+                            }
+                            Context context = ((ContentProvider) param.thisObject).getContext();
+                            param.setResult(exportCursor(context));
+                        }
+                    });
+            XposedBridge.log(TAG + "hooked " + BACKUP_PROVIDER + ".query()");
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + "could not hook the export trigger: " + t);
+        }
+    }
+
+    private static MatrixCursor exportCursor(Context context) {
+        NoteExporter.Result result;
+        if (context == null || !callerAllowed(context)) {
+            result = new NoteExporter.Result(false, "导出失败：调用方不是本模块", "");
+        } else {
+            result = NoteExporter.export(context);
+        }
+        XposedBridge.log(TAG + "export: " + result.message);
+        MatrixCursor cursor = new MatrixCursor(ConfigContract.EXPORT_COLUMNS);
+        cursor.addRow(new Object[] { result.ok ? 1 : 0, result.message, result.path });
+        return cursor;
+    }
+
+    /**
+     * Only the module may ask for an export; every other app on the device would
+     * otherwise be able to drop the user's notes into the Download folder. The
+     * shell is allowed through so the feature can be tested with `content query`.
+     */
+    private static boolean callerAllowed(Context context) {
+        int uid = Binder.getCallingUid();
+        if (uid == Process.myUid() || uid == 0 || uid == 2000) {
+            return true;
+        }
+        try {
+            String[] packages = context.getPackageManager().getPackagesForUid(uid);
+            if (packages != null) {
+                for (String name : packages) {
+                    if (MODULE_PKG.equals(name)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + "could not resolve the caller: " + t);
+        }
+        return false;
+    }
+
+    /**
+     * Fallback path: when the settings screen cannot reach the provider it leaves
+     * a request behind and opens the Notes app instead, so the export happens the
+     * next time this process starts.
+     */
+    private static void hookPendingExport() {
+        try {
+            XposedHelpers.findAndHookMethod(Instrumentation.class, "callApplicationOnCreate",
+                    Application.class, new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                            Application app = (Application) param.args[0];
+                            if (app != null && TARGET_PKG.equals(app.getPackageName())) {
+                                runPendingExport(app);
+                            }
+                        }
+                    });
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + "could not hook application start: " + t);
+        }
+    }
+
+    /** Off the main thread: nothing here may slow down starting the Notes app. */
+    private static void runPendingExport(final Context context) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                long request = readExportRequest(context);
+                if (request <= 0) {
+                    return;
+                }
+                SharedPreferences prefs = context.getSharedPreferences(
+                        ConfigContract.NOTE_PREFS, Context.MODE_PRIVATE);
+                if (prefs.getLong(ConfigContract.KEY_EXPORT_HANDLED, 0L) >= request) {
+                    return;
+                }
+                // Claim it first: a crash mid-export must not loop on every start.
+                prefs.edit().putLong(ConfigContract.KEY_EXPORT_HANDLED, request).apply();
+
+                NoteExporter.Result result = NoteExporter.export(context);
+                XposedBridge.log(TAG + "pending export: " + result.message);
+                toast(context, result.message);
+            }
+        }, "note-watermark-export").start();
+    }
+
+    private static long readExportRequest(Context context) {
+        Cursor cursor = null;
+        try {
+            cursor = context.getContentResolver().query(
+                    ConfigContract.URI, null, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int column = cursor.getColumnIndex(ConfigContract.COLUMN_EXPORT_REQUEST);
+                return column >= 0 ? cursor.getLong(column) : 0L;
+            }
+            XposedBridge.log(TAG + "the module's settings provider answered nothing");
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + "could not read the export request: " + t);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+        return 0L;
+    }
+
+    private static void toast(final Context context, final String message) {
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show();
+                } catch (Throwable t) {
+                    XposedBridge.log(TAG + "could not show a toast: " + t);
+                }
+            }
+        });
     }
 
     private static void applyQuietly(Object activity, String from) {
