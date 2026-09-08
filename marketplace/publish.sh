@@ -7,8 +7,8 @@ PKG=com.jy.notewatermark
 ORG_REPO="Xposed-Modules-Repo/$PKG"
 GH=/data/data/com.termux/files/usr/bin/gh
 APK="$ROOT/build/NoteWatermark.apk"
-VERSION="2.1"
-TAG="3-$VERSION"
+VERSION="2.2"
+TAG="4-$VERSION"
 
 if [ ! -f "$APK" ]; then
   echo "missing $APK - run ./build.sh first"
@@ -25,8 +25,8 @@ trap 'rm -rf "$TMP"' EXIT
 cd "$TMP"
 git clone --depth=1 "git@github.com:$ORG_REPO.git" repo
 cd repo
-cp "$MP/SUMMARY" "$MP/README.md" "$MP/SOURCE_URL" .
-git add SUMMARY README.md SOURCE_URL
+cp "$MP/SUMMARY" "$MP/README.md" "$MP/SOURCE_URL" "$MP/ic_launcher.png" .
+git add SUMMARY README.md SOURCE_URL ic_launcher.png
 if git diff --cached --quiet; then
   echo "Metadata already up to date"
 else
@@ -37,7 +37,6 @@ fi
 "$GH" release create "$TAG" "$APK" \
   --repo "$ORG_REPO" \
   --title "$VERSION" \
-  --notes-file "$MP/CHANGELOG-$VERSION.md" 2>/dev/null || \
-  echo "Release $TAG may already exist"
+  --notes-file "$MP/CHANGELOG-$VERSION.md"
 
 echo "Published to https://github.com/$ORG_REPO"

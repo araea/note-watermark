@@ -1,5 +1,7 @@
 # note-watermark
 
+<img src="artwork/icon.svg" width="96" height="96" alt="软件图标" />
+
 ColorOS 便签模块：移除或自定义分享长图底部的水印，并将全部便签导出为 ZIP。
 
 当前按 ColorOS 16.0.10、便签 16.6.22 核验。

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="18 18 72 72" role="img" aria-labelledby="title desc">
+  <title id="title">便签分享水印</title>
+  <desc id="desc">暖白折角纸页与清透闪光，代表去除水印、整理与分享便签。</desc>
+  <defs>
+    <linearGradient id="base" x1="22" y1="18" x2="85" y2="94" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#F5BC62"/><stop offset="1" stop-color="#D97838"/></linearGradient>
+    <linearGradient id="paper" x1="36" y1="28" x2="70" y2="78" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFFEF7"/><stop offset="1" stop-color="#FFF0D7"/></linearGradient>
+    <clipPath id="mask"><rect x="18" y="18" width="72" height="72" rx="16"/></clipPath>
+  </defs>
+  <g clip-path="url(#mask)">
+  <g id="background">
+    <path fill="url(#base)" d="M0 0H108V108H0Z"/>
+    <path fill="#FFFFFF" fill-opacity="0.065" d="M0 0H108V24C71 21 55 54 0 65Z"/>
+  </g>
+  <g id="foreground">
+    <path fill="#813F1F" fill-opacity="0.16" d="M40 30H61L75 44V74C75 79 72 82 67 82H40C35 82 32 79 32 74V38C32 33 35 30 40 30Z"/>
+    <path fill="url(#paper)" d="M40 27H61L75 41V71C75 76 72 79 67 79H40C35 79 32 76 32 71V35C32 30 35 27 40 27Z"/>
+    <path fill="#EAC18D" fill-opacity="0.35" d="M61 27L75 41V46L63 41C61 40 60 38 60 35Z"/>
+    <path fill="#FFE4B5" d="M61 27L75 41H66C63 41 61 39 61 36Z"/>
+    <path fill="#CC8B50" d="M42 43H51C52.1 43 53 43.9 53 45C53 46.1 52.1 47 51 47H42C40.9 47 40 46.1 40 45C40 43.9 40.9 43 42 43Z"/>
+    <path fill="#D8AD78" d="M42 53H63C64.1 53 65 53.9 65 55C65 56.1 64.1 57 63 57H42C40.9 57 40 56.1 40 55C40 53.9 40.9 53 42 53Z M42 62H54C55.1 62 56 62.9 56 64C56 65.1 55.1 66 54 66H42C40.9 66 40 65.1 40 64C40 62.9 40.9 62 42 62Z"/>
+    <path fill="#D97838" d="M70 55C71.5 63.5 75.5 67.5 84 69C75.5 70.5 71.5 74.5 70 83C68.5 74.5 64.5 70.5 56 69C64.5 67.5 68.5 63.5 70 55Z"/>
+    <path fill="#FFFCF0" d="M70 59C71.1 65.1 73.9 67.9 80 69C73.9 70.1 71.1 72.9 70 79C68.9 72.9 66.1 70.1 60 69C66.1 67.9 68.9 65.1 70 59Z"/>
+  </g>
+  </g>
+</svg>

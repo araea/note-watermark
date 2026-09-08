@@ -39,7 +39,7 @@ java -cp $R8 com.android.tools.r8.D8 --release --min-api 26 \
 echo "   dex: $(ls -la $OUT/dex/classes.dex | awk '{print $5}') bytes"
 
 echo "== 3. aapt package =="
-$AAPT package -f -M $R/AndroidManifest.xml -I $FRAMEWORK -A $R/assets -F $APK_UNSIGNED
+$AAPT package -f -M $R/AndroidManifest.xml -I $FRAMEWORK -A $R/assets -S $R/res -F $APK_UNSIGNED
 ( cd $OUT/dex && $AAPT add $APK_UNSIGNED classes.dex >/dev/null )
 
 echo "== 4. keystore (generate once) =="
