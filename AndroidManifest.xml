@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.jy.notewatermark"
-    android:versionCode="4"
-    android:versionName="2.2">
+    android:versionCode="5"
+    android:versionName="2.3">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
 
@@ -15,6 +15,7 @@
         android:label="便签分享水印"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
+        android:theme="@style/AppTheme"
         android:hasCode="true">
 
         <activity

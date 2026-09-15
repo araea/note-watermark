@@ -24,7 +24,7 @@ def vector(paths, gradients, *, legacy=False):
     if legacy:
         parent = ET.SubElement(result, 'group', attrs(translateX=-18, translateY=-18))
         ET.SubElement(parent, 'clip-path', attrs(pathData=
-            'M34 18H74Q90 18 90 34V74Q90 90 74 90H34Q18 90 18 74V34Q18 18 34 18Z'))
+            'M40 18H68Q90 18 90 40V68Q90 90 68 90H40Q18 90 18 68V40Q18 18 40 18Z'))
     for source in paths:
         if source.tag != SVG + 'path':
             raise ValueError('Artwork layers must contain only paths')
