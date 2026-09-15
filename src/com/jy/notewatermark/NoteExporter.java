@@ -333,7 +333,7 @@ final class NoteExporter {
         sb.append("ColorOS 便签导出\n");
         sb.append("================\n\n");
         sb.append("导出时间：").append(time(System.currentTimeMillis())).append('\n');
-        sb.append("导出工具：便签分享水印模块（note-watermark）\n\n");
+        sb.append("导出工具：素笺（note-watermark）\n\n");
         sb.append("便签总数：").append(total).append('\n');
         sb.append("已导出：").append(total - skipped).append('\n');
         if (skipped > 0) {

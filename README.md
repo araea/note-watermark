@@ -1,4 +1,4 @@
-# note-watermark
+# 素笺
 
 <img src="artwork/icon.svg" width="96" height="96" alt="软件图标" />
 
@@ -23,7 +23,7 @@ Material 3 Expressive 风格：强调式标题、双色图标、分组卡片、�
 
 1. 安装 APK，在 Xposed 兼容框架中启用模块，并把 `com.coloros.note` 加入作用域。
 2. 冷启动便签。
-3. 在「便签分享水印」中设置文字，留空表示不显示水印。
+3. 在「素笺」中设置文字，留空表示不显示水印。
 
 ## 导出便签
 

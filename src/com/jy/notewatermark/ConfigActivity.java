@@ -48,7 +48,7 @@ public final class ConfigActivity extends Activity {
         super.onCreate(state);
         ui = new MaterialStyle(this);
         ui.applyWindow();
-        setTitle("便签分享水印");
+        setTitle(getApplicationInfo().loadLabel(getPackageManager()));
         prefs = getSharedPreferences(ConfigContract.PREFS, 0);
         exportJob = (ExportJob) getLastNonConfigurationInstance();
         if (exportJob == null) exportJob = new ExportJob(getApplicationContext());

@@ -7,8 +7,8 @@ PKG=com.jy.notewatermark
 ORG_REPO="Xposed-Modules-Repo/$PKG"
 GH=/data/data/com.termux/files/usr/bin/gh
 APK="$ROOT/build/NoteWatermark.apk"
-VERSION="2.3"
-TAG="5-$VERSION"
+VERSION="2.3.1"
+TAG="6-$VERSION"
 
 if [ ! -f "$APK" ]; then
   echo "missing $APK - run ./build.sh first"
@@ -19,6 +19,8 @@ if ! "$GH" api "repos/$ORG_REPO" --jq .name >/dev/null 2>&1; then
   echo "Marketplace repo not ready yet: $ORG_REPO"
   exit 1
 fi
+
+"$GH" api "repos/$ORG_REPO" -X PATCH -f description='素笺' >/dev/null
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT

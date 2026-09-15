@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="18 18 72 72" role="img" aria-labelledby="title desc">
-  <title id="title">便签分享水印</title>
+  <title id="title">素笺</title>
   <desc id="desc">Material 3 Expressive：麦芽黄纸页与鼠尾草绿闪光，留下内容，轻盈分享。</desc>
   <defs><clipPath id="mask"><rect x="18" y="18" width="72" height="72" rx="22"/></clipPath></defs>
   <g clip-path="url(#mask)">
