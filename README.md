@@ -33,7 +33,7 @@ Material 3 Expressive 风格，支持系统深浅色，Android 12 起跟随系�
 
 在同一设置页选择「导出全部便签」。ZIP 保存到系统「下载」目录，按便签分类写入文本、HTML 与附件；加密便签不导出，只在导出说明中计数。
 
-## 构建
+## 构建与测试
 
 ```sh
 curl -fsSL -o libs/r8.jar https://maven.google.com/com/android/tools/r8/8.9.35/r8-8.9.35.jar
@@ -42,13 +42,7 @@ curl -fsSL -o libs/r8.jar https://maven.google.com/com/android/tools/r8/8.9.35/r
 
 产物为 `build/NoteWatermark.apk`。首次构建会在 `keystore/` 生成签名密钥，该目录不纳入 Git；更换密钥后，旧版本需先卸载才能安装新包。
 
-应用图标是 `res/` 下的矢量资源（`mipmap-anydpi` 基础版、`-v26` 自适应、`-v33` 单色），由 `scripts/generate-icons.py` 从 `artwork/*.svg` 生成，`--check` 可校验。市场用的 512×512 PNG 另经 `scripts/render-icon.cjs` 导出。
-
-## 界面验证
-
-运行 `bash tests/build.sh` 构建独立的真机测试 APK，用同一签名安装后执行 `am instrument -w com.jy.notewatermark.test/.DesignSmoke`。测试覆盖保存、清空、草稿与导出状态重建、深浅色文字对比度，以及 320dp / 200% 字号布局；不导出真实便签，结束后恢复原设置。
-
-覆盖安装后模块管理器对图标的缓存不会自动刷新，`am force-stop org.matrix.vector.manager` 再打开即重读。
+`bash tests/build.sh` 构建独立的真机测试包，用同一签名安装后执行 `am instrument -w com.jy.notewatermark.test/.DesignSmoke`。测试不导出真实便签，结束后恢复原设置。
 
 ## 许可证
 
