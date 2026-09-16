@@ -1,8 +1,8 @@
 # 软件图标
 
-采用 Material 3 Expressive 的双色图形与柔和轮廓：麦芽黄底、深赭色折角纸页、鼠尾草绿闪光。减少装饰，强化小尺寸下的识别；单色版保留纸页轮廓与闪光。
+采用 Material 3 Expressive 的双色图形与柔和轮廓：麦芽黄底、深赭色折角纸页、鼠尾草绿闪光。减少装饰，强化小尺寸下的识别。单色版保留纸页轮廓与闪光。
 
-`icon.svg` 是彩色源稿，`icon-monochrome.svg` 是主题单色源稿。路径按 Android 的 108 × 108 坐标绘制，主要图形集中在中心安全区域。SVG 预览裁取中心 72 × 72 并加 22 单位圆角；自适应图标使用完整前景与背景，由系统裁切。
+`icon.svg` 是彩色源稿，`icon-monochrome.svg` 是主题单色源稿。路径按 Android 的 108 × 108 坐标绘制，主要图形集中在中心安全区域。SVG 预览裁取中心 72 × 72 并加 22 单位圆角。自适应图标使用完整前景与背景，由系统裁切。
 
 编辑源稿后运行：
 
@@ -11,7 +11,7 @@ python scripts/generate-icons.py
 python scripts/generate-icons.py --check
 ```
 
-生成的 `res/` 矢量资源纳入 Git，普通 APK 构建无需 Python 或图像依赖。基础图标用于兼容读取传统资源的界面，v26 资源提供自适应前景/背景，v33 增加单色层；清单的 `icon` 与 `roundIcon` 引用同一套资源。
+生成的 `res/` 矢量资源纳入 Git，普通 APK 构建无需 Python 或图像依赖。基础图标用于兼容读取传统资源的界面。v26 资源提供自适应前景/背景，v33 增加单色层。清单的 `icon` 与 `roundIcon` 引用同一套资源。
 
 市场使用同一 SVG 导出的 512 × 512 透明 PNG。准备 `puppeteer-core` 与 Chromium 后运行：
 
