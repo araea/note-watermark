@@ -1,23 +1,8 @@
 # 素笺
 
-<img src="artwork/icon.svg" width="96" height="96" alt="软件图标" />
-
 ColorOS 便签模块：移除或自定义分享长图底部的水印，并把全部便签导出为 ZIP。
 
 按 ColorOS 16.0.10、便签 16.6.22 核验。
-
-## 界面
-
-Material 3 Expressive 风格，支持系统深浅色，Android 12 起跟随系统动态配色。设置页提供实时示意预览、80 字输入计数与未保存提示。旋转屏幕时保留草稿与进行中的导出状态。
-
-色彩、字级、形状与动效 token 整理在 [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md)，改界面前先读它。
-
-<details>
-<summary>查看浅色与深色界面</summary>
-
-<img src="artwork/screenshots/light.png" width="280" alt="便签设置浅色界面" /> <img src="artwork/screenshots/dark.png" width="280" alt="便签设置深色界面" />
-
-</details>
 
 ## 运行条件
 

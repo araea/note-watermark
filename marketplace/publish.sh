@@ -1,5 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Push marketplace metadata + release to Xposed-Modules-Repo/com.jy.notewatermark
+#
+#   ./publish.sh                  push metadata, then create the release for $TAG
+#   ./publish.sh --metadata-only  push only SUMMARY/README/SOURCE_URL/icon (no release)
 set -euo pipefail
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 MP="$ROOT/marketplace"
@@ -34,6 +37,11 @@ if git diff --cached --quiet; then
 else
   git commit -m "Update marketplace metadata for note-watermark $VERSION"
   git push origin HEAD
+fi
+
+if [ "${1:-}" = "--metadata-only" ]; then
+  echo "Metadata pushed for $TAG (no release created)"
+  exit 0
 fi
 
 "$GH" release create "$TAG" "$APK" \

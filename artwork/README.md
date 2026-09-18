@@ -1,8 +1,6 @@
 # 软件图标
 
-采用 Material 3 Expressive 的双色图形与柔和轮廓：麦芽黄底、深赭色折角纸页、鼠尾草绿闪光。减少装饰，强化小尺寸下的识别。单色版保留纸页轮廓与闪光。
-
-`icon.svg` 是彩色源稿，`icon-monochrome.svg` 是主题单色源稿。路径按 Android 的 108 × 108 坐标绘制，主要图形集中在中心安全区域。SVG 预览裁取中心 72 × 72 并加 22 单位圆角。自适应图标使用完整前景与背景，由系统裁切。
+`icon.svg` 是彩色源稿，`icon-monochrome.svg` 是主题单色源稿。路径按 Android 的 108 × 108 坐标绘制。
 
 编辑源稿后运行：
 
@@ -20,7 +18,3 @@ CHROMIUM=/path/to/chromium node scripts/render-icon.cjs
 ```
 
 依赖装在别处时用 `NODE_PATH` 指向其 `node_modules`。导出只加载本地 SVG，不访问网页。
-
-设计尺寸参考 [Android 自适应图标规范](https://developer.android.com/develop/ui/compose/system/icon_design_adaptive)。
-
-设计依据：[Material 3 Expressive](https://m3.material.io/)。图形使用矢量源稿，PNG 仅用于模块市场。
