@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.jy.notewatermark"
-    android:versionCode="7"
-    android:versionName="2.3.2">
+    android:versionCode="8"
+    android:versionName="3.0.0">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
 
@@ -11,8 +11,15 @@
         <package android:name="com.coloros.note" />
     </queries>
 
+    <!--
+        Modern libxposed module (API 102): the entry class, scope and module
+        properties live in META-INF/xposed/ inside the APK, so the legacy
+        xposedmodule / xposeddescription / xposedminversion / xposedscope
+        meta-data are gone.
+    -->
     <application
         android:label="@string/app_name"
+        android:description="@string/app_description"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:theme="@style/AppTheme"
@@ -31,10 +38,5 @@
             android:name=".ConfigProvider"
             android:authorities="com.jy.notewatermark.settings"
             android:exported="true" />
-
-        <meta-data android:name="xposedmodule" android:value="true" />
-        <meta-data android:name="xposeddescription" android:value="去掉/自定义 ColorOS 便签分享长图底部的水印，一键导出全部便签" />
-        <meta-data android:name="xposedminversion" android:value="93" />
-        <meta-data android:name="xposedscope" android:value="com.coloros.note" />
     </application>
 </manifest>

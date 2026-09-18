@@ -20,12 +20,12 @@ Material 3 Expressive 风格，支持系统深浅色，Android 12 起跟随系�
 ## 运行条件
 
 - ColorOS 便签 `com.coloros.note`
-- 可为便签启用模块作用域的 Xposed 兼容框架
+- 支持 libxposed API 102 的框架（LSPosed 2.x 起）
 
 ## 安装
 
 1. 安装市场发布的 `NoteWatermark.apk`
-2. 在框架中启用模块，把 `com.coloros.note` 加入作用域
+2. 在框架中启用模块。作用域由模块固定为 `com.coloros.note`，不需要手工添加
 3. 冷启动便签
 4. 打开「素笺」，设置水印文字。留空表示不显示水印
 
@@ -40,7 +40,7 @@ curl -fsSL -o libs/r8.jar https://maven.google.com/com/android/tools/r8/8.9.35/r
 ./build.sh
 ```
 
-产物为 `build/NoteWatermark.apk`。首次构建会在 `keystore/` 生成签名密钥，该目录不纳入 Git。更换密钥后，旧版本需先卸载才能安装新包。
+产物为 `build/NoteWatermark.apk`。模块按 `io.github.libxposed:api:102.0.0` 构建，该依赖只用于编译，不打进 APK；`build.sh` 会在缺少时从 Maven Central 取到 `libs/libxposed-api-102.jar`。首次构建会在 `keystore/` 生成签名密钥，该目录不纳入 Git。更换密钥后，旧版本需先卸载才能安装新包。
 
 `bash tests/build.sh` 构建独立的真机测试包，用同一签名安装后执行 `am instrument -w com.jy.notewatermark.test/.DesignSmoke`。测试不导出真实便签，结束后恢复原设置。
 

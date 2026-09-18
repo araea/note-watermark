@@ -18,11 +18,11 @@ Material 3 Expressive 风格，支持系统深浅色，Android 12 起跟随系�
 ## 运行条件
 
 - ColorOS 便签 `com.coloros.note`
-- 可为便签启用模块作用域的 Xposed 兼容框架
+- 支持 libxposed API 102 的框架（LSPosed 2.x 起）
 
 ## 安装
 
-1. 安装 APK，在框架中启用模块，把 `com.coloros.note` 加入作用域
+1. 安装 APK，在框架中启用模块。作用域由模块固定为 `com.coloros.note`，不需要手工添加
 2. 冷启动便签
 3. 打开「素笺」，设置水印文字。留空表示不显示水印
 

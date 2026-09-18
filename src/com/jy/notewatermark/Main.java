@@ -12,17 +12,18 @@ import android.os.Binder;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
+import android.util.Log;
 import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.ByteArrayOutputStream;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
-import de.robv.android.xposed.IXposedHookLoadPackage;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import io.github.libxposed.api.XposedInterface;
+import io.github.libxposed.api.XposedModule;
+import io.github.libxposed.api.XposedModuleInterface;
 
 /**
  * Removes (or replaces) the "ColorOS 便签" watermark that the ColorOS Notes app
@@ -51,10 +52,15 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
  * The same injection also carries the one-tap note export: the module UI cannot
  * read the Notes database, but code running inside the Notes process can, so the
  * export is triggered from here and written by {@link NoteExporter}.
+ *
+ * Built against the modern libxposed API 102: the entry class extends
+ * {@link XposedModule}, hooks are interceptor chains, and no
+ * de.robv.android.xposed classes are used. The framework supplies the API at
+ * runtime; the module never bundles it.
  */
-public class Main implements IXposedHookLoadPackage {
+public class Main extends XposedModule {
 
-    private static final String TAG = "[NoteWatermark] ";
+    private static final String TAG = "NoteWatermark";
     private static final String TARGET_PKG = "com.coloros.note";
     private static final String TARGET_CLASS = "com.nearme.note.activity.edit.SaveImageAndShare";
     /** Exported, permission-free provider of the Notes app; see AndroidManifest. */
@@ -68,43 +74,74 @@ public class Main implements IXposedHookLoadPackage {
         "/sdcard/Download/note_watermark.txt",
     };
 
+    /**
+     * The framework instantiates one entry per process; the static helpers below
+     * route their logging through it. It is only set once the framework has
+     * attached the interface in {@link #onModuleLoaded}.
+     */
+    private static volatile Main sInstance;
+
     @Override
-    public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
-        if (!TARGET_PKG.equals(lpparam.packageName)) {
+    public void onModuleLoaded(XposedModuleInterface.ModuleLoadedParam param) {
+        sInstance = this;
+    }
+
+    @Override
+    public void onPackageReady(XposedModuleInterface.PackageReadyParam param) {
+        if (!TARGET_PKG.equals(param.getPackageName())) {
             return;
         }
+        installHooks(param.getClassLoader());
+    }
 
-        // Primary hook: right after the app has filled in the logo/watermark views.
+    private void installHooks(ClassLoader classLoader) {
+        Class<?> target;
         try {
-            XposedHelpers.findAndHookMethod(TARGET_CLASS, lpparam.classLoader, "setLogo",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                            applyQuietly(param.thisObject, "setLogo");
-                        }
-                    });
-            XposedBridge.log(TAG + "hooked " + TARGET_CLASS + ".setLogo()");
+            target = classLoader.loadClass(TARGET_CLASS);
         } catch (Throwable t) {
-            XposedBridge.log(TAG + "could not hook setLogo(): " + t);
+            log("could not load " + TARGET_CLASS + ": " + t);
+            return;
         }
-
-        hookExportTrigger(lpparam);
+        hookSetLogo(target);
+        hookCreateImageFile(target);
+        hookExportTrigger(classLoader);
         hookPendingExport();
+    }
 
-        // Safety net: run again just before the bitmap is drawn, in case the app
-        // re-shows the views after setLogo() (e.g. on a skin change).
+    /** Primary hook: right after the app has filled in the logo/watermark views. */
+    private void hookSetLogo(Class<?> target) {
         try {
-            XposedHelpers.findAndHookMethod(TARGET_CLASS, lpparam.classLoader, "createImageFile",
-                    int.class, int.class, int.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                            applyQuietly(param.thisObject, "createImageFile");
-                        }
-                    });
-            XposedBridge.log(TAG + "hooked " + TARGET_CLASS + ".createImageFile(int,int,int)");
+            Method setLogo = target.getDeclaredMethod("setLogo");
+            hook(setLogo).setId("setLogo").intercept(new XposedInterface.Hooker() {
+                @Override
+                public Object intercept(XposedInterface.Chain chain) throws Throwable {
+                    Object result = chain.proceed();
+                    applyQuietly(chain.getThisObject(), "setLogo");
+                    return result;
+                }
+            });
+            log("hooked " + TARGET_CLASS + ".setLogo()");
         } catch (Throwable t) {
-            XposedBridge.log(TAG + "could not hook createImageFile(): " + t);
+            log("could not hook setLogo(): " + t);
+        }
+    }
+
+    /** Safety net: run again just before the bitmap is drawn, in case the app
+     * re-shows the views after setLogo() (e.g. on a skin change). */
+    private void hookCreateImageFile(Class<?> target) {
+        try {
+            Method createImageFile =
+                    target.getDeclaredMethod("createImageFile", int.class, int.class, int.class);
+            hook(createImageFile).setId("createImageFile").intercept(new XposedInterface.Hooker() {
+                @Override
+                public Object intercept(XposedInterface.Chain chain) throws Throwable {
+                    applyQuietly(chain.getThisObject(), "createImageFile");
+                    return chain.proceed();
+                }
+            });
+            log("hooked " + TARGET_CLASS + ".createImageFile(int,int,int)");
+        } catch (Throwable t) {
+            log("could not hook createImageFile(): " + t);
         }
     }
 
@@ -114,25 +151,25 @@ public class Main implements IXposedHookLoadPackage {
      * runs in the process that can read the notes, and that a query also starts
      * the Notes process when it is not running.
      */
-    private static void hookExportTrigger(XC_LoadPackage.LoadPackageParam lpparam) {
+    private void hookExportTrigger(ClassLoader classLoader) {
         try {
-            XposedHelpers.findAndHookMethod(BACKUP_PROVIDER, lpparam.classLoader, "query",
-                    Uri.class, String[].class, String.class, String[].class, String.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                            Uri uri = (Uri) param.args[0];
-                            if (uri == null || !ConfigContract.EXPORT_SEGMENT
-                                    .equals(uri.getLastPathSegment())) {
-                                return;
-                            }
-                            Context context = ((ContentProvider) param.thisObject).getContext();
-                            param.setResult(exportCursor(context));
-                        }
-                    });
-            XposedBridge.log(TAG + "hooked " + BACKUP_PROVIDER + ".query()");
+            Method query = classLoader.loadClass(BACKUP_PROVIDER).getDeclaredMethod(
+                    "query", Uri.class, String[].class, String.class, String[].class, String.class);
+            hook(query).setId("exportTrigger").intercept(new XposedInterface.Hooker() {
+                @Override
+                public Object intercept(XposedInterface.Chain chain) throws Throwable {
+                    Uri uri = (Uri) chain.getArg(0);
+                    if (uri == null || !ConfigContract.EXPORT_SEGMENT
+                            .equals(uri.getLastPathSegment())) {
+                        return chain.proceed();
+                    }
+                    Context context = ((ContentProvider) chain.getThisObject()).getContext();
+                    return exportCursor(context);
+                }
+            });
+            log("hooked " + BACKUP_PROVIDER + ".query()");
         } catch (Throwable t) {
-            XposedBridge.log(TAG + "could not hook the export trigger: " + t);
+            log("could not hook the export trigger: " + t);
         }
     }
 
@@ -143,7 +180,7 @@ public class Main implements IXposedHookLoadPackage {
         } else {
             result = NoteExporter.export(context);
         }
-        XposedBridge.log(TAG + "export: " + result.message);
+        log("export: " + result.message);
         MatrixCursor cursor = new MatrixCursor(ConfigContract.EXPORT_COLUMNS);
         cursor.addRow(new Object[] { result.ok ? 1 : 0, result.message, result.path });
         return cursor;
@@ -169,7 +206,7 @@ public class Main implements IXposedHookLoadPackage {
                 }
             }
         } catch (Throwable t) {
-            XposedBridge.log(TAG + "could not resolve the caller: " + t);
+            log("could not resolve the caller: " + t);
         }
         return false;
     }
@@ -179,20 +216,24 @@ public class Main implements IXposedHookLoadPackage {
      * a request behind and opens the Notes app instead, so the export happens the
      * next time this process starts.
      */
-    private static void hookPendingExport() {
+    private void hookPendingExport() {
         try {
-            XposedHelpers.findAndHookMethod(Instrumentation.class, "callApplicationOnCreate",
-                    Application.class, new XC_MethodHook() {
+            Method callApplicationOnCreate = Instrumentation.class
+                    .getDeclaredMethod("callApplicationOnCreate", Application.class);
+            hook(callApplicationOnCreate).setId("pendingExport")
+                    .intercept(new XposedInterface.Hooker() {
                         @Override
-                        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                            Application app = (Application) param.args[0];
+                        public Object intercept(XposedInterface.Chain chain) throws Throwable {
+                            Object result = chain.proceed();
+                            Application app = (Application) chain.getArg(0);
                             if (app != null && TARGET_PKG.equals(app.getPackageName())) {
                                 runPendingExport(app);
                             }
+                            return result;
                         }
                     });
         } catch (Throwable t) {
-            XposedBridge.log(TAG + "could not hook application start: " + t);
+            log("could not hook application start: " + t);
         }
     }
 
@@ -214,7 +255,7 @@ public class Main implements IXposedHookLoadPackage {
                 prefs.edit().putLong(ConfigContract.KEY_EXPORT_HANDLED, request).apply();
 
                 NoteExporter.Result result = NoteExporter.export(context);
-                XposedBridge.log(TAG + "pending export: " + result.message);
+                log("pending export: " + result.message);
                 toast(context, result.message);
             }
         }, "note-watermark-export").start();
@@ -229,9 +270,9 @@ public class Main implements IXposedHookLoadPackage {
                 int column = cursor.getColumnIndex(ConfigContract.COLUMN_EXPORT_REQUEST);
                 return column >= 0 ? cursor.getLong(column) : 0L;
             }
-            XposedBridge.log(TAG + "the module's settings provider answered nothing");
+            log("the module's settings provider answered nothing");
         } catch (Throwable t) {
-            XposedBridge.log(TAG + "could not read the export request: " + t);
+            log("could not read the export request: " + t);
         } finally {
             if (cursor != null) {
                 cursor.close();
@@ -247,7 +288,7 @@ public class Main implements IXposedHookLoadPackage {
                 try {
                     Toast.makeText(context, message, Toast.LENGTH_LONG).show();
                 } catch (Throwable t) {
-                    XposedBridge.log(TAG + "could not show a toast: " + t);
+                    log("could not show a toast: " + t);
                 }
             }
         });
@@ -257,7 +298,7 @@ public class Main implements IXposedHookLoadPackage {
         try {
             apply(activity, from);
         } catch (Throwable t) {
-            XposedBridge.log(TAG + "apply() failed in " + from + ": " + t);
+            log("apply() failed in " + from + ": " + t);
         }
     }
 
@@ -279,7 +320,7 @@ public class Main implements IXposedHookLoadPackage {
             setVisibility(waterMark, 8);
             setVisibility(shareLogo, 8);
             setVisibility(shareLogoOriginal, 8);
-            XposedBridge.log(TAG + from + ": watermark removed");
+            log(from + ": watermark removed");
         } else if (custom.length() == 0) {
             // INVISIBLE keeps the original measured watermark row (roughly two text
             // lines) as clean bottom padding without changing the note itself.
@@ -288,7 +329,7 @@ public class Main implements IXposedHookLoadPackage {
             setVisibility(waterMark, 4);
             setVisibility(shareLogo, 4);
             setVisibility(shareLogoOriginal, 4);
-            XposedBridge.log(TAG + from + ": blank watermark spacing kept");
+            log(from + ": blank watermark spacing kept");
         } else {
             // "ColorOS" half goes away, the app-name half carries the custom text.
             setVisibility(waterMark, 8);
@@ -302,7 +343,7 @@ public class Main implements IXposedHookLoadPackage {
                 setText(shareLogoOriginal, custom);
                 setVisibility(shareLogoOriginal, 0);
             }
-            XposedBridge.log(TAG + from + ": custom watermark applied");
+            log(from + ": custom watermark applied");
         }
     }
 
@@ -322,7 +363,7 @@ public class Main implements IXposedHookLoadPackage {
                     return new Config(text == null ? "" : text.trim(), keepSpace);
                 }
             } catch (Throwable t) {
-                XposedBridge.log(TAG + "could not read settings provider: " + t);
+                log("could not read settings provider: " + t);
             } finally {
                 if (cursor != null) {
                     cursor.close();
@@ -379,12 +420,23 @@ public class Main implements IXposedHookLoadPackage {
         }
     }
 
+    /** Reads a field the way XposedHelpers.getObjectField did: up the hierarchy. */
     private static Object field(Object obj, String name) {
-        try {
-            return XposedHelpers.getObjectField(obj, name);
-        } catch (Throwable t) {
+        if (obj == null) {
             return null;
         }
+        for (Class<?> c = obj.getClass(); c != null; c = c.getSuperclass()) {
+            try {
+                Field f = c.getDeclaredField(name);
+                f.setAccessible(true);
+                return f.get(obj);
+            } catch (NoSuchFieldException e) {
+                // keep walking up
+            } catch (Throwable t) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private static void setVisibility(Object view, int visibility) {
@@ -394,7 +446,7 @@ public class Main implements IXposedHookLoadPackage {
         try {
             view.getClass().getMethod("setVisibility", int.class).invoke(view, visibility);
         } catch (Throwable t) {
-            XposedBridge.log(TAG + "setVisibility failed: " + t);
+            log("setVisibility failed: " + t);
         }
     }
 
@@ -402,7 +454,21 @@ public class Main implements IXposedHookLoadPackage {
         try {
             view.getClass().getMethod("setText", CharSequence.class).invoke(view, text);
         } catch (Throwable t) {
-            XposedBridge.log(TAG + "setText failed: " + t);
+            log("setText failed: " + t);
         }
+    }
+
+    /** Logs through the framework once it is attached, to logcat before that. */
+    private static void log(String message) {
+        Main instance = sInstance;
+        if (instance != null) {
+            try {
+                instance.log(Log.INFO, TAG, message);
+                return;
+            } catch (Throwable t) {
+                // fall through to logcat
+            }
+        }
+        Log.i(TAG, message);
     }
 }
