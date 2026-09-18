@@ -1,15 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="18 18 72 72" role="img" aria-labelledby="title desc">
   <title id="title">素笺</title>
-  <desc id="desc">Material 3 Expressive：麦芽黄纸页与鼠尾草绿闪光，留下内容，轻盈分享。</desc>
+  <desc id="desc">一页便签，标题与正文之下留出空白，旁边一点鼠尾草绿的闪光：内容留下，水印散去。</desc>
   <defs><clipPath id="mask"><rect x="18" y="18" width="72" height="72" rx="22"/></clipPath></defs>
   <g clip-path="url(#mask)">
   <g id="background"><path fill="#FFE5A0" d="M0 0H108V108H0Z"/></g>
   <g id="foreground">
-    <path fill="#775A0B" d="M40 30H61Q63 30 65 32L72 39Q74 41 74 44V69Q74 77 66 77H40Q33 77 33 70V37Q33 30 40 30Z"/>
-    <path fill="#FFEDC4" d="M61 30V39Q61 43 65 43H74Z"/>
-    <path fill="#FFF8EE" d="M42 43H51Q53 43 53 45Q53 47 51 47H42Q40 47 40 45Q40 43 42 43Z M42 53H63Q65 53 65 55Q65 57 63 57H42Q40 57 40 55Q40 53 42 53Z M42 63H53Q55 63 55 65Q55 67 53 67H42Q40 67 40 65Q40 63 42 63Z"/>
-    <path fill="#FFE5A0" d="M70 53Q73 63 83 66Q73 69 70 79Q67 69 57 66Q67 63 70 53Z M70 66H84V82H70Z"/>
-    <path fill="#3E6655" d="M70 57Q72 64 79 66Q72 68 70 75Q68 68 61 66Q68 64 70 57Z"/>
+    <path fill="#775A0B" d="M36 29H50L62 41V67Q62 75 54 75H36Q28 75 28 67V37Q28 29 36 29Z"/>
+    <path fill="#FFEDC4" d="M50 29L62 41H54Q50 41 50 37Z"/>
+    <path fill="#FFF8EE" d="M39 35H43Q46 35 46 38Q46 41 43 41H39Q36 41 36 38Q36 35 39 35Z"/>
+    <path fill="#FFF8EE" fill-opacity="0.8" d="M38 47H52Q54 47 54 49Q54 51 52 51H38Q36 51 36 49Q36 47 38 47Z M38 55H52Q54 55 54 57Q54 59 52 59H38Q36 59 36 57Q36 55 38 55Z M38 63H44Q46 63 46 65Q46 67 44 67H38Q36 67 36 65Q36 63 38 63Z"/>
+    <path fill="#3E6655" d="M74 59Q76.7 65.3 83 68Q76.7 70.7 74 77Q71.3 70.7 65 68Q71.3 65.3 74 59Z"/>
   </g>
   </g>
 </svg>

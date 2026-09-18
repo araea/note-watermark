@@ -104,7 +104,7 @@ public class Main extends XposedModule {
         }
         hookSetLogo(target);
         hookCreateImageFile(target);
-        hookExportTrigger(classLoader);
+        hookModuleBridge(classLoader);
         hookPendingExport();
     }
 
@@ -146,21 +146,27 @@ public class Main extends XposedModule {
     }
 
     /**
-     * The module settings screen asks for an export by querying a made-up path on
-     * the Notes app's own exported provider. Answering it here means the export
-     * runs in the process that can read the notes, and that a query also starts
+     * The module settings screen talks to the injected code by querying made-up
+     * paths on the Notes app's own exported provider. Answering them here means the
+     * work runs in the process that can read the notes, and that a query also starts
      * the Notes process when it is not running.
+     *
+     * Two paths are served: an export request, and a status probe that reports which
+     * build of the hook is actually loaded in this process.
      */
-    private void hookExportTrigger(ClassLoader classLoader) {
+    private void hookModuleBridge(ClassLoader classLoader) {
         try {
             Method query = classLoader.loadClass(BACKUP_PROVIDER).getDeclaredMethod(
                     "query", Uri.class, String[].class, String.class, String[].class, String.class);
-            hook(query).setId("exportTrigger").intercept(new XposedInterface.Hooker() {
+            hook(query).setId("moduleBridge").intercept(new XposedInterface.Hooker() {
                 @Override
                 public Object intercept(XposedInterface.Chain chain) throws Throwable {
                     Uri uri = (Uri) chain.getArg(0);
-                    if (uri == null || !ConfigContract.EXPORT_SEGMENT
-                            .equals(uri.getLastPathSegment())) {
+                    String segment = uri == null ? null : uri.getLastPathSegment();
+                    if (ConfigContract.STATUS_SEGMENT.equals(segment)) {
+                        return statusCursor();
+                    }
+                    if (!ConfigContract.EXPORT_SEGMENT.equals(segment)) {
                         return chain.proceed();
                     }
                     Context context = ((ContentProvider) chain.getThisObject()).getContext();
@@ -169,8 +175,19 @@ public class Main extends XposedModule {
             });
             log("hooked " + BACKUP_PROVIDER + ".query()");
         } catch (Throwable t) {
-            log("could not hook the export trigger: " + t);
+            log("could not hook the module bridge: " + t);
         }
+    }
+
+    /**
+     * Reports the version baked into the dex that is loaded right now, which is what
+     * the settings screen compares against the installed APK: an updated module whose
+     * host process has not restarted still answers with the old version.
+     */
+    private static MatrixCursor statusCursor() {
+        MatrixCursor cursor = new MatrixCursor(ConfigContract.STATUS_COLUMNS);
+        cursor.addRow(new Object[] { BuildConfig.VERSION_NAME });
+        return cursor;
     }
 
     private static MatrixCursor exportCursor(Context context) {

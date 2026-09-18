@@ -10,17 +10,21 @@ import android.graphics.Canvas;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Checkable;
 import android.widget.EditText;
-import android.widget.ScrollView;
-import android.widget.CompoundButton;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.util.Map;
 
 /** Device UI regression checks; never exports the real Notes database. */
 public final class DesignSmoke extends Instrumentation {
+    private static final int MODE_HIDDEN = 0, MODE_BLANK = 1, MODE_CUSTOM = 2;
+    private static final int STATUS_ACTIVE = 1, STATUS_INACTIVE = 3;
+
     private boolean dark;
     private float fontScale = 1f;
     private int density;
@@ -47,24 +51,65 @@ public final class DesignSmoke extends Instrumentation {
         try {
             preferences = getTargetContext().getSharedPreferences("settings", 0);
             original = preferences.getAll();
-            preferences.edit().remove("watermark_text").remove("keep_blank_space").commit();
+            preferences.edit().remove("watermark_text").remove("keep_blank_space")
+                    .remove("last_custom_text").commit();
             launch();
             runOnMainSync(() -> {
-                check(!view("saveButton").isEnabled(), "clean settings disable save");
-                check(view("saveButton").getClass().getName().equals("com.google.android.material.button.MaterialButton"), "official MaterialButton");
-                check(toggle().getClass().getName().equals("com.google.android.material.materialswitch.MaterialSwitch"), "official MaterialSwitch");
+                check(mode() == MODE_BLANK, "unset settings start on the blank-spacing mode");
+                check(((Checkable) button(MODE_BLANK)).isChecked(), "the chosen mode is the checked segment");
+                check(group().getClass().getName()
+                        .equals("com.google.android.material.button.MaterialButtonToggleGroup"),
+                        "official MaterialButtonToggleGroup");
+                check(view("inputLayout").getVisibility() == View.GONE,
+                        "the text field only appears in the custom mode");
+                check(view("previewFooter").getVisibility() == View.VISIBLE
+                        && view("previewWatermark").getVisibility() == View.INVISIBLE,
+                        "blank spacing keeps the footer's height without its text");
+
+                button(MODE_HIDDEN).performClick();
+                check(view("previewFooter").getVisibility() == View.GONE, "hidden collapses the footer");
+                flush();
+                check(!preferences.getBoolean("keep_blank_space", true), "hidden persists by itself");
+                check(preferences.getString("watermark_text", "x").isEmpty(), "hidden clears the text");
+
+                button(MODE_CUSTOM).performClick();
+                check(view("inputLayout").getVisibility() == View.VISIBLE, "custom reveals the text field");
+                check(error() != null, "an empty custom watermark is called out");
                 edit().setText("  M3 Expressive  ");
-                check(view("saveButton").isEnabled(), "draft enables save");
-                check(text("previewWatermark").getText().toString().equals("M3 Expressive"), "live trimmed preview");
-                view("saveButton").performClick();
-                check(preferences.getString("watermark_text", "").equals("M3 Expressive"), "save persists trimmed text");
-                view("clearButton").performClick();
-                check(preferences.getString("watermark_text", "x").isEmpty(), "clear persists empty watermark");
-                toggle().setChecked(false);
-                check(view("previewFooter").getVisibility() == View.GONE, "empty footer collapses");
-                toggle().setChecked(true);
-                check(view("previewFooter").getVisibility() == View.VISIBLE, "blank spacing returns");
+                check(error() == null, "the callout clears once something is written");
+                check(text("previewWatermark").getText().toString().equals("M3 Expressive"),
+                        "the preview trims what it shows");
+                check(view("previewDivider").getVisibility() == View.VISIBLE,
+                        "a custom watermark brings back the rule above it");
+                flush();
+                check(preferences.getString("watermark_text", "").equals("M3 Expressive"),
+                        "typing persists on its own");
+
+                button(MODE_BLANK).performClick();
+                flush();
+                check(preferences.getString("watermark_text", "x").isEmpty(),
+                        "leaving the custom mode clears the stored watermark");
+                check(preferences.getString("last_custom_text", "").equals("M3 Expressive"),
+                        "the written line is remembered for next time");
+                button(MODE_CUSTOM).performClick();
+                check(mode() == MODE_CUSTOM, "picking custom again selects it");
+                check(edit().getText().toString().trim().equals("M3 Expressive"),
+                        "coming back offers the same line again");
                 edit().setText("Draft survives recreation");
+                flush();
+            });
+
+            // The phone can stop this activity the moment it launches (a lock screen keeps
+            // focus), and a stopped activity's bundle is captured before the checks run, so
+            // the instance state is asserted on a bundle taken here rather than through the
+            // system's own timing. What recreation still proves deterministically is the
+            // retained export job, which never travels through a bundle.
+            Bundle saved = new Bundle();
+            runOnMainSync(() -> {
+                callActivityOnSaveInstanceState(activity, saved);
+                check(saved.getInt("mode", -1) == MODE_CUSTOM, "instance state records the mode");
+                check("Draft survives recreation".equals(saved.getString("draft")),
+                        "instance state records the unfinished line");
                 Object job = field(activity, "exportJob");
                 set(job, "running", true);
                 set(job, "message", "正在整理便签与附件，请稍候…");
@@ -77,42 +122,88 @@ public final class DesignSmoke extends Instrumentation {
             removeMonitor(monitor);
             waitForIdleSync();
             runOnMainSync(() -> {
-                check(edit().getText().toString().equals("Draft survives recreation"), "draft survives recreation");
-                check(!view("exportButton").isEnabled(), "in-flight export stays disabled after recreation");
-                check(view("exportProgress").getVisibility() == View.VISIBLE, "export progress survives recreation");
+                check(!view("exportButton").isEnabled(),
+                        "an in-flight export stays disabled after recreation");
+                check(view("exportProgress").getVisibility() == View.VISIBLE,
+                        "export progress survives recreation");
                 Object job = field(activity, "exportJob");
                 set(job, "running", false);
-                set(job, "message", "");
-                view("clearButton").performClick();
                 set(job, "failed", true);
                 set(job, "message", "测试错误：请重试");
-                invoke(activity, "updateExport");
-                check(text("exportButton").getText().toString().equals("重试导出"), "error offers retry");
-                check(view("exportButton").isEnabled(), "retry enabled");
+                invoke(activity, "renderExport");
+                check(text("exportButton").getText().toString().equals("重试导出"), "a failure offers a retry");
+                check(view("exportButton").isEnabled(), "the retry is reachable");
                 set(job, "failed", false);
                 set(job, "message", "");
-                invoke(activity, "updateExport");
-                check(view("exportStatus").getVisibility() == View.GONE, "empty export state hidden");
+                invoke(activity, "renderExport");
+                check(view("exportStatus").getVisibility() == View.GONE, "an empty export state is hidden");
+            });
+            close();
+
+            // A cold start is what a user actually comes back to: the mode and the line
+            // are read back from the settings the screen saved on its own.
+            launch();
+            runOnMainSync(() -> {
+                button(MODE_CUSTOM).performClick();
+                edit().setText("回到原处");
+                flush();
             });
             close();
             launch();
-            capture("light");
+            runOnMainSync(() -> {
+                check(mode() == MODE_CUSTOM, "a cold start reopens on the saved mode");
+                check(edit().getText().toString().equals("回到原处"),
+                        "a cold start brings the saved line back");
+                check(view("inputLayout").getVisibility() == View.VISIBLE,
+                        "a cold start reveals the field the mode needs");
+                button(MODE_BLANK).performClick();
+                flush();
+            });
+            close();
+
+            launch();
+            capture("light", STATUS_ACTIVE);
+            runOnMainSync(() -> {
+                button(MODE_CUSTOM).performClick();
+                edit().setText("摘自我的便签");
+                flush();
+            });
+            capture("light-custom", STATUS_ACTIVE);
+            runOnMainSync(() -> {
+                button(MODE_HIDDEN).performClick();
+                flush();
+            });
+            capture("light-hidden", STATUS_ACTIVE);
+            runOnMainSync(() -> {
+                button(MODE_BLANK).performClick();
+                flush();
+            });
+            close();
+            launch();
+            capture("light-inactive", STATUS_INACTIVE);
             close();
             dark = true;
             launch();
-            capture("dark");
+            capture("dark", STATUS_ACTIVE);
             close();
             dark = false;
+
             fontScale = 2f;
             density = Math.round(getTargetContext().getResources().getDisplayMetrics().widthPixels / 320f * 160);
             launch();
             runOnMainSync(() -> {
+                relayout(activity.getWindow().getDecorView());
+                check(group().getOrientation() == LinearLayout.VERTICAL,
+                        "the segments stack when three of them no longer fit");
                 checkTextBounds(activity.getWindow().getDecorView());
+                button(MODE_CUSTOM).performClick();
                 edit().setText("ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFG");
                 check(edit().length() == 80, "80-character input limit");
-                view("saveButton").performClick();
+                flush();
+                relayout(activity.getWindow().getDecorView());
+                checkTextBounds(activity.getWindow().getDecorView());
             });
-            capture("large-text-320dp");
+            capture("large-text-320dp", STATUS_ACTIVE);
             close();
             result.putString("stream", "\n" + report + "PASS: expressive settings UI\n");
             restore();
@@ -147,21 +238,43 @@ public final class DesignSmoke extends Instrumentation {
         edit.commit();
     }
 
-    private void capture(String name) {
-        waitForIdleSync();
+    /** Pins the module state so the review screenshots do not depend on what the phone answers. */
+    private void capture(String name, int status) {
+        // Pinning first also blocks further probes; the settle lets an in-flight one land,
+        // and the second pin then has the screen to itself. The phone's lock screen keeps
+        // stopping and restarting this activity, which is what kicks those probes off.
+        pin(status);
+        settle();
+        pin(status);
+        settle();
+        runOnMainSync(() -> relayout(activity.getWindow().getDecorView()));
         runOnMainSync(() -> {
-            ScrollView scroll = (ScrollView) view("scroll");
-            View content = scroll.getChildAt(0);
+            ViewGroup scroll = (ViewGroup) view("scroll");
+            View content = view("content");
             check(content.getWidth() > 0 && content.getHeight() > 0, "measured " + name);
-            float scale = 600f / content.getWidth();
-            Bitmap image = Bitmap.createBitmap(600, Math.round(content.getHeight() * scale), Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(image);
-            canvas.scale(scale, scale);
+            if (status == STATUS_ACTIVE) {
+                check(view("statusDetail").getVisibility() == View.GONE,
+                        "a working module says nothing more");
+                check(view("statusRow").getBackground() == null,
+                        "a working module needs no container of its own");
+                check(view("statusRow").getPaddingLeft() == 0,
+                        "and stays level with the rest of the page");
+            } else {
+                check(view("statusRow").getBackground() != null,
+                        "a module that is not working gets a surface of its own");
+                check(view("statusDetail").getVisibility() == View.VISIBLE,
+                        "and says what to do about it");
+            }
             Object ui = field(activity, "ui");
-            canvas.drawColor((Integer) field(ui, "surface"));
-            content.draw(canvas);
+            View viewport = activity.getWindow().getDecorView();
+            write(name, viewport, (Integer) field(ui, "surface"));
+            write(name + "-page", scroll.getChildAt(0), (Integer) field(ui, "surface"));
             checkContrast(ui, "ink", "surface");
+            checkContrast(ui, "muted", "surface");
             checkContrast(ui, "muted", "container");
+            checkContrast(ui, "tertiary", "surface");
+            checkContrast(ui, "ink", "sheet");
+            checkContrast(ui, "muted", "sheet");
             checkContrast(ui, "onPrimary", "primary");
             checkContrast(ui, "onPrimaryContainer", "primaryContainer");
             checkContrast(ui, "onSecondary", "secondary");
@@ -169,25 +282,55 @@ public final class DesignSmoke extends Instrumentation {
             checkContrast(ui, "onTertiary", "tertiary");
             checkContrast(ui, "onTertiaryContainer", "tertiaryContainer");
             checkContrast(ui, "onErrorContainer", "errorContainer");
-            try {
-                File directory = new File(getTargetContext().getFilesDir(), "design-review");
-                directory.mkdirs();
-                try (FileOutputStream out = new FileOutputStream(new File(directory, name + ".png"))) {
-                    image.compress(Bitmap.CompressFormat.PNG, 100, out);
-                }
-                image.recycle();
-                View viewport = activity.getWindow().getDecorView();
-                float viewportScale = 600f / viewport.getWidth();
-                Bitmap screen = Bitmap.createBitmap(600, Math.round(viewport.getHeight() * viewportScale), Bitmap.Config.ARGB_8888);
-                Canvas screenCanvas = new Canvas(screen);
-                screenCanvas.scale(viewportScale, viewportScale);
-                viewport.draw(screenCanvas);
-                try (FileOutputStream out = new FileOutputStream(new File(directory, name + "-viewport.png"))) {
-                    screen.compress(Bitmap.CompressFormat.PNG, 100, out);
-                }
-                screen.recycle();
-            } catch (Exception error) { throw new RuntimeException(error); }
         });
+    }
+
+    /**
+     * The phone keeps this activity stopped (its lock screen holds focus), and a stopped
+     * window never runs a traversal, so a state change would otherwise be screenshotted
+     * against the previous layout. Measuring and laying out by hand keeps the review
+     * images honest.
+     */
+    private static void relayout(View root) {
+        root.measure(View.MeasureSpec.makeMeasureSpec(root.getWidth(), View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(root.getHeight(), View.MeasureSpec.EXACTLY));
+        root.layout(root.getLeft(), root.getTop(), root.getRight(), root.getBottom());
+    }
+
+    private void pin(int status) {
+        runOnMainSync(() -> {
+            set(activity, "checking", true);
+            set(activity, "status", status);
+            invoke(activity, "renderStatus");
+        });
+    }
+
+    /** Gives the state transition time to land, so a screenshot is not a half-played animation. */
+    private void settle() {
+        waitForIdleSync();
+        try { Thread.sleep(700); } catch (InterruptedException ignored) { }
+        waitForIdleSync();
+    }
+
+    private void write(String name, View source, int background) {
+        if (source.getWidth() <= 0 || source.getHeight() <= 0) return;
+        float scale = 600f / source.getWidth();
+        Bitmap image = Bitmap.createBitmap(600, Math.round(source.getHeight() * scale), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(image);
+        canvas.scale(scale, scale);
+        canvas.drawColor(background);
+        source.draw(canvas);
+        try {
+            File directory = new File(getTargetContext().getFilesDir(), "design-review");
+            directory.mkdirs();
+            try (FileOutputStream out = new FileOutputStream(new File(directory, name + ".png"))) {
+                image.compress(Bitmap.CompressFormat.PNG, 100, out);
+            }
+        } catch (Exception error) {
+            throw new RuntimeException(error);
+        } finally {
+            image.recycle();
+        }
     }
 
     private void checkContrast(Object ui, String foreground, String background) {
@@ -228,7 +371,16 @@ public final class DesignSmoke extends Instrumentation {
     private View view(String name) { return (View) field(activity, name); }
     private TextView text(String name) { return (TextView) view(name); }
     private EditText edit() { return (EditText) view("watermarkInput"); }
-    private CompoundButton toggle() { return (CompoundButton) view("keepBlankSpaceSwitch"); }
+    private LinearLayout group() { return (LinearLayout) view("modeGroup"); }
+    private int mode() { return (Integer) field(activity, "mode"); }
+    private View button(int index) { return (View) Array.get(field(activity, "modeButtons"), index); }
+    private CharSequence error() {
+        Object layout = field(activity, "inputLayout");
+        try { return (CharSequence) layout.getClass().getMethod("getError").invoke(layout); }
+        catch (Exception failure) { throw new RuntimeException(failure); }
+    }
+    private void flush() { invoke(activity, "flush"); }
+
     private void check(boolean condition, String message) {
         if (!condition) throw new AssertionError(message);
         report.append("  ok ").append(message).append('\n');

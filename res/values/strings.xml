@@ -2,4 +2,48 @@
 <resources>
     <string name="app_name">素笺</string>
     <string name="app_description">去掉或自定义 ColorOS 便签分享长图底部的水印，一键导出全部便签</string>
+    <string name="app_subtitle">ColorOS 便签</string>
+    <string name="version_footer">素笺 %1$s</string>
+
+    <!-- Module state, checked through the hook itself. -->
+    <string name="status_checking">正在确认模块状态</string>
+    <string name="status_active">模块已生效</string>
+    <string name="status_stale">便签仍在运行旧版模块</string>
+    <string name="status_stale_detail">重新启动 ColorOS 便签，这个版本才会接管分享长图。</string>
+    <string name="status_inactive">模块尚未生效</string>
+    <string name="status_inactive_detail">在框架中启用「素笺」，再冷启动 ColorOS 便签。作用域已固定，无需手动添加。</string>
+    <string name="status_missing">未找到 ColorOS 便签</string>
+    <string name="status_missing_detail">本模块只作用于 ColorOS 自带的便签应用。</string>
+    <string name="status_recheck">点按重新检查</string>
+
+    <!-- The one thing this module changes. -->
+    <string name="share_section">分享长图底部</string>
+    <string name="mode_hidden">不显示</string>
+    <string name="mode_blank">留白</string>
+    <string name="mode_custom">自定义</string>
+    <string name="mode_hidden_detail">底部整行收起，长图到正文为止。</string>
+    <string name="mode_blank_detail">水印去掉，留下约两行高度的空白。</string>
+    <string name="mode_custom_detail">保留分隔线，把水印换成你写的一句话。</string>
+    <string name="mode_custom_empty">还没有写水印文字，此时与「留白」相同。</string>
+    <string name="watermark_hint">水印文字</string>
+    <string name="watermark_error">请输入水印文字</string>
+    <string name="preview_sample_title">今天的灵感</string>
+    <string name="preview_sample_body">一些想法，一点日常。每一次记录，都保留本来的样子。</string>
+    <string name="preview_sample_watermark">ColorOS 便签</string>
+    <string name="preview_note">示意效果，以便签实际分享为准。</string>
+    <string name="apply_hint">改动即时保存，重新打开便签的分享页后生效。</string>
+    <string name="apply_announcement">已保存，重新打开便签分享页后生效</string>
+
+    <!-- Backup -->
+    <string name="export_section">导出便签</string>
+    <string name="export_body">把全部便签按分类整理成 ZIP，保存到系统「下载」文件夹，包含文本、HTML 与附件。</string>
+    <string name="export_privacy">加密便签会自动跳过</string>
+    <string name="export_action">导出全部便签</string>
+    <string name="export_running">正在导出…</string>
+    <string name="export_retry">重试导出</string>
+    <string name="export_working">正在整理便签与附件，请稍候…</string>
+    <string name="export_interrupted">上次导出的状态已中断，请先检查「下载」文件夹，必要时重新导出。</string>
+    <string name="export_missing_notes">未找到 ColorOS 便签，请先安装便签应用。</string>
+    <string name="export_cannot_open">无法打开便签。请手动打开便签，并确认模块已启用。</string>
+    <string name="export_requested">已请求导出。请留意便签内的完成提示；若无响应，请确认模块已启用并重新启动便签。</string>
 </resources>

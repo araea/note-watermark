@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.jy.notewatermark"
-    android:versionCode="9"
-    android:versionName="3.1.0">
+    package="com.jy.notewatermark">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
 

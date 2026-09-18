@@ -1,0 +1,326 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    One screen, two tasks. The share preview is the hero: it is the picture the
+    module actually changes, so it sits directly above the control that changes it.
+    Backup is a separate errand, separated by space rather than by a rule.
+-->
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface"
+    android:focusableInTouchMode="true">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurface"
+        app:elevation="0dp"
+        app:liftOnScroll="true"
+        app:liftOnScrollColor="?attr/colorSurfaceContainer">
+
+        <com.google.android.material.appbar.CollapsingToolbarLayout
+            android:id="@+id/collapsing"
+            style="@style/Widget.Material3Expressive.CollapsingToolbar.Large"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/collapsingToolbarLayoutLargeSize"
+            app:layout_scrollFlags="scroll|exitUntilCollapsed|snap"
+            app:subtitle="@string/app_subtitle"
+            app:title="@string/app_name">
+
+            <com.google.android.material.appbar.MaterialToolbar
+                android:id="@+id/toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="?attr/actionBarSize"
+                app:layout_collapseMode="pin" />
+        </com.google.android.material.appbar.CollapsingToolbarLayout>
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/scroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <LinearLayout
+                android:id="@+id/content"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|center_horizontal"
+                android:orientation="vertical"
+                android:paddingLeft="@dimen/space_xl"
+                android:paddingTop="@dimen/space_sm"
+                android:paddingRight="@dimen/space_xl"
+                android:paddingBottom="@dimen/space_section">
+
+                <!-- Quiet when the module works, loud only when it does not. -->
+                <LinearLayout
+                    android:id="@+id/statusRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:baselineAligned="false"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:minHeight="@dimen/touch_target"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.progressindicator.CircularProgressIndicator
+                        android:id="@+id/statusSpinner"
+                        style="@style/Widget.Material3.CircularProgressIndicator.ExtraSmall"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:importantForAccessibility="no"
+                        android:indeterminate="true" />
+
+                    <ImageView
+                        android:id="@+id/statusIcon"
+                        android:layout_width="@dimen/icon_status"
+                        android:layout_height="@dimen/icon_status"
+                        android:importantForAccessibility="no"
+                        android:visibility="gone" />
+
+                    <LinearLayout
+                        android:id="@+id/statusText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="@dimen/space_md"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/statusTitle"
+                            style="@style/Text.Sujian.Label"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+
+                        <TextView
+                            android:id="@+id/statusDetail"
+                            style="@style/Text.Sujian.Caption"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_xs"
+                            android:visibility="gone" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/shareSection"
+                    style="@style/Text.Sujian.Section"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_xl"
+                    android:text="@string/share_section" />
+
+                <!-- The sheet mirrors the real share picture: note, then the footer row. -->
+                <LinearLayout
+                    android:id="@+id/previewSheet"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_lg"
+                    android:orientation="vertical"
+                    android:padding="@dimen/space_xl">
+
+                    <TextView
+                        android:id="@+id/sampleTitle"
+                        style="@style/Text.Sujian.Title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/preview_sample_title" />
+
+                    <TextView
+                        android:id="@+id/sampleBody"
+                        style="@style/Text.Sujian.Caption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:text="@string/preview_sample_body" />
+
+                    <LinearLayout
+                        android:id="@+id/previewFooter"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_xl"
+                        android:orientation="vertical">
+
+                        <View
+                            android:id="@+id/previewDivider"
+                            android:layout_width="match_parent"
+                            android:layout_height="@dimen/hairline" />
+
+                        <TextView
+                            android:id="@+id/previewWatermark"
+                            style="@style/Text.Sujian.Caption"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_md"
+                            android:gravity="center" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/previewNote"
+                    style="@style/Text.Sujian.Caption"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_sm"
+                    android:text="@string/preview_note" />
+
+                <com.google.android.material.button.MaterialButtonToggleGroup
+                    android:id="@+id/modeGroup"
+                    style="@style/Widget.Material3Expressive.MaterialButtonToggleGroup"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_xl"
+                    app:selectionRequired="true"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/modeHidden"
+                        style="@style/Widget.Sujian.Segment"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/mode_hidden" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/modeBlank"
+                        style="@style/Widget.Sujian.Segment"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/mode_blank" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/modeCustom"
+                        style="@style/Widget.Sujian.Segment"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/mode_custom" />
+                </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                <TextView
+                    android:id="@+id/modeDetail"
+                    style="@style/Text.Sujian.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_md" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/inputLayout"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_lg"
+                    android:hint="@string/watermark_hint"
+                    android:visibility="gone"
+                    app:counterEnabled="true"
+                    app:counterMaxLength="80"
+                    app:endIconMode="clear_text">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/watermarkInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:imeOptions="actionDone"
+                        android:inputType="text"
+                        android:saveEnabled="false" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:id="@+id/applyHint"
+                    style="@style/Text.Sujian.Caption"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_xl"
+                    android:text="@string/apply_hint" />
+
+                <TextView
+                    android:id="@+id/exportSection"
+                    style="@style/Text.Sujian.Section"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_section"
+                    android:text="@string/export_section" />
+
+                <TextView
+                    android:id="@+id/exportBody"
+                    style="@style/Text.Sujian.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_sm"
+                    android:text="@string/export_body" />
+
+                <LinearLayout
+                    android:id="@+id/exportPrivacyRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_md"
+                    android:baselineAligned="false"
+                    android:gravity="center_vertical"
+                    android:importantForAccessibility="noHideDescendants"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:id="@+id/exportPrivacyIcon"
+                        android:layout_width="@dimen/icon_inline"
+                        android:layout_height="@dimen/icon_inline"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_lock" />
+
+                    <TextView
+                        android:id="@+id/exportPrivacy"
+                        style="@style/Text.Sujian.Caption"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="@dimen/space_sm"
+                        android:text="@string/export_privacy" />
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/exportButton"
+                    style="@style/Widget.Sujian.Export"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_lg"
+                    android:text="@string/export_action"
+                    app:icon="@drawable/ic_export" />
+
+                <com.google.android.material.progressindicator.LinearProgressIndicator
+                    android:id="@+id/exportProgress"
+                    style="@style/Widget.Material3Expressive.LinearProgressIndicator.Wavy"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_md"
+                    android:importantForAccessibility="no"
+                    android:indeterminate="true"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/exportStatus"
+                    style="@style/Text.Sujian.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_md"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/versionLabel"
+                    style="@style/Text.Sujian.Caption"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_section"
+                    android:gravity="center" />
+            </LinearLayout>
+        </FrameLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

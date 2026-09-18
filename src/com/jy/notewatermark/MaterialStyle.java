@@ -5,46 +5,39 @@ import android.animation.ValueAnimator;
 import android.content.res.Configuration;
 import android.content.res.ColorStateList;
 import android.os.Build;
-import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.TextView;
 import androidx.transition.ChangeBounds;
+import androidx.transition.Fade;
 import androidx.transition.TransitionManager;
+import androidx.transition.TransitionSet;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.motion.MotionUtils;
 import com.google.android.material.shape.MaterialShapeDrawable;
 import com.google.android.material.shape.ShapeAppearanceModel;
-import com.google.android.material.textview.MaterialTextView;
 
-/** Single source of semantic roles. Components inherit the stable M3 Expressive theme. */
+/**
+ * The design tokens the code needs at runtime. Typography, shape and spacing are
+ * declared in res/values and applied in the layout; what is left here is the colour
+ * roles, the two spacing steps a tinted surface needs, and the one transition every
+ * state change on this screen runs through.
+ */
 final class MaterialStyle {
-    enum Type {
-        DISPLAY(com.google.android.material.R.attr.textAppearanceDisplaySmallEmphasized),
-        HEADLINE(com.google.android.material.R.attr.textAppearanceHeadlineSmallEmphasized),
-        TITLE(com.google.android.material.R.attr.textAppearanceTitleMediumEmphasized),
-        BODY(com.google.android.material.R.attr.textAppearanceBodyMedium),
-        LABEL(com.google.android.material.R.attr.textAppearanceLabelLarge),
-        CAPTION(com.google.android.material.R.attr.textAppearanceBodySmall);
-        final int attr;
-        Type(int attr) { this.attr = attr; }
-    }
     final Activity activity;
     final boolean dark;
-    final int surface, low, container, high, ink, muted, outline, primary, onPrimary,
+    final int surface, sheet, container, ink, muted, outline, primary, onPrimary,
             primaryContainer, onPrimaryContainer, secondary, onSecondary, secondaryContainer,
             onSecondaryContainer, tertiary, onTertiary, tertiaryContainer, onTertiaryContainer,
             error, onErrorContainer, errorContainer;
-    final int xs, sm, md, lg, xl, section;
+    final int md, lg;
 
     MaterialStyle(Activity activity) {
         this.activity = activity;
         dark = (activity.getResources().getConfiguration().uiMode
                 & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         surface = color(com.google.android.material.R.attr.colorSurface);
-        low = color(com.google.android.material.R.attr.colorSurfaceContainerLow);
+        sheet = color(com.google.android.material.R.attr.colorSurfaceContainerLowest);
         container = color(com.google.android.material.R.attr.colorSurfaceContainer);
-        high = color(com.google.android.material.R.attr.colorSurfaceContainerHigh);
         ink = color(com.google.android.material.R.attr.colorOnSurface);
         muted = color(com.google.android.material.R.attr.colorOnSurfaceVariant);
         outline = color(com.google.android.material.R.attr.colorOutlineVariant);
@@ -63,33 +56,39 @@ final class MaterialStyle {
         error = color(androidx.appcompat.R.attr.colorError);
         errorContainer = color(com.google.android.material.R.attr.colorErrorContainer);
         onErrorContainer = color(com.google.android.material.R.attr.colorOnErrorContainer);
-        xs = dimen(R.dimen.space_xs); sm = dimen(R.dimen.space_sm);
-        md = dimen(R.dimen.space_md); lg = dimen(R.dimen.space_lg);
-        xl = dimen(R.dimen.space_xl); section = dimen(R.dimen.space_section);
+        md = dimen(R.dimen.space_md);
+        lg = dimen(R.dimen.space_lg);
     }
+
     private int color(int attr) { return MaterialColors.getColor(activity, attr, "Sujian"); }
     int dimen(int id) { return activity.getResources().getDimensionPixelSize(id); }
-    int dp(int value) { return Math.round(value * activity.getResources().getDisplayMetrics().density); }
 
-    MaterialShapeDrawable shape(int color, int style) {
-        MaterialShapeDrawable d = new MaterialShapeDrawable(ShapeAppearanceModel.builder(activity, style, 0).build());
-        d.setFillColor(ColorStateList.valueOf(color));
-        return d;
+    MaterialShapeDrawable shape(int fill, int style) {
+        MaterialShapeDrawable drawable =
+                new MaterialShapeDrawable(ShapeAppearanceModel.builder(activity, style, 0).build());
+        drawable.setFillColor(ColorStateList.valueOf(fill));
+        return drawable;
     }
 
-    TextView text(String value, Type type, int color) {
-        TextView view = new MaterialTextView(activity);
-        TypedValue appearance = new TypedValue();
-        activity.getTheme().resolveAttribute(type.attr, appearance, true);
-        view.setTextAppearance(appearance.resourceId);
-        view.setText(value);
-        view.setTextColor(color);
-        return view;
+    /** A hairline keeps the preview readable when sheet and surface are nearly the same tone. */
+    MaterialShapeDrawable outlinedShape(int fill, int stroke, int style) {
+        MaterialShapeDrawable drawable = shape(fill, style);
+        drawable.setStroke(dimen(R.dimen.hairline), ColorStateList.valueOf(stroke));
+        return drawable;
     }
 
-    void animateLayout(ViewGroup group) {
+    /**
+     * One transition for every state change, so the screen always moves the same way.
+     * A running transition suppresses layout on its scene root, so any earlier one is
+     * ended first: an interrupted transition would otherwise freeze the group's bounds.
+     */
+    void animate(ViewGroup group) {
         if (!group.isLaidOut() || !ValueAnimator.areAnimatorsEnabled()) return;
-        ChangeBounds change = new ChangeBounds();
+        TransitionManager.endTransitions(group);
+        TransitionSet change = new TransitionSet()
+                .setOrdering(TransitionSet.ORDERING_TOGETHER)
+                .addTransition(new Fade())
+                .addTransition(new ChangeBounds());
         change.setDuration(MotionUtils.resolveThemeDuration(activity,
                 com.google.android.material.R.attr.motionDurationMedium2, 300));
         change.setInterpolator(MotionUtils.resolveThemeInterpolator(activity,
@@ -100,7 +99,7 @@ final class MaterialStyle {
 
     void applyWindow() {
         activity.getWindow().setStatusBarColor(surface);
-        activity.getWindow().setNavigationBarColor(low);
+        activity.getWindow().setNavigationBarColor(surface);
         activity.getWindow().getDecorView().setSystemUiVisibility(dark ? 0
                 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         activity.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);

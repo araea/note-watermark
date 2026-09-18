@@ -11,41 +11,65 @@ import android.os.Looper;
 import android.text.Editable;
 import android.text.InputFilter;
 import android.text.TextWatcher;
-import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
-import android.widget.EditText;
-import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
-import androidx.appcompat.app.AlertDialog;
-import com.google.android.material.appbar.MaterialToolbar;
+import androidx.core.widget.NestedScrollView;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.color.DynamicColors;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.google.android.material.materialswitch.MaterialSwitch;
+import com.google.android.material.progressindicator.CircularProgressIndicator;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
-import com.google.android.material.textfield.TextInputLayout;
 import com.google.android.material.textfield.TextInputEditText;
-import static com.jy.notewatermark.MaterialStyle.Type.*;
+import com.google.android.material.textfield.TextInputLayout;
 import java.lang.ref.WeakReference;
 
-/** One task-focused screen: draft preview, editor, backup, and a persistent save action. */
+/**
+ * One screen for the one setting this module owns, plus the backup errand.
+ *
+ * The share preview is the subject: it shows the footer of the picture the Notes
+ * app is about to produce, and the segmented control right under it names the three
+ * outcomes the hook can actually produce. Choices apply as they are made, so there
+ * is no draft state, no save bar and no "are you sure" on the way out.
+ */
 public final class ConfigActivity extends Activity {
+    /** The three states {@link Main} can put the share footer in. */
+    private static final int MODE_HIDDEN = 0, MODE_BLANK = 1, MODE_CUSTOM = 2;
+
+    private static final int STATUS_CHECKING = 0, STATUS_ACTIVE = 1,
+            STATUS_STALE = 2, STATUS_INACTIVE = 3, STATUS_MISSING = 4;
+
+    /** Long enough that typing is not saved letter by letter, short enough to feel immediate. */
+    private static final long SAVE_DELAY_MS = 450L;
+
     private MaterialStyle ui;
     private SharedPreferences prefs;
-    private EditText watermarkInput;
+
+    private NestedScrollView scroll;
+    private LinearLayout content, statusRow, statusText, previewSheet, previewFooter;
+    private CircularProgressIndicator statusSpinner;
+    private ImageView statusIcon, exportPrivacyIcon;
+    private TextView statusTitle, statusDetail, sampleTitle, sampleBody, previewWatermark,
+            modeDetail, exportStatus, exportPrivacy, versionLabel;
+    private View previewDivider;
+    private MaterialButtonToggleGroup modeGroup;
+    private MaterialButton[] modeButtons;
     private TextInputLayout inputLayout;
-    private MaterialSwitch keepBlankSpaceSwitch;
-    private TextView draftStatus, previewWatermark, previewCaption, exportStatus, modeLabel;
-    private LinearLayout previewFooter, preview;
-    private MaterialButton saveButton, clearButton, exportButton;
+    private TextInputEditText watermarkInput;
+    private MaterialButton exportButton;
     private LinearProgressIndicator exportProgress;
+
+    private boolean resumed;
+    private int mode = MODE_BLANK;
+    private int status = STATUS_CHECKING;
+    private boolean checking;
     private ExportJob exportJob;
-    private ScrollView scroll;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Runnable persist = this::persist;
 
     @Override protected void onCreate(Bundle state) {
         DynamicColors.applyToActivityIfAvailable(this);
@@ -53,175 +77,141 @@ public final class ConfigActivity extends Activity {
         ui = new MaterialStyle(this);
         ui.applyWindow();
         prefs = getSharedPreferences(ConfigContract.PREFS, 0);
+        setContentView(R.layout.activity_config);
+        bind();
+        paint();
+
         exportJob = (ExportJob) getLastNonConfigurationInstance();
         if (exportJob == null) exportJob = new ExportJob(getApplicationContext());
         if (state != null && !exportJob.running) {
             exportJob.message = state.getBoolean("exportRunning")
-                    ? "上次导出的状态已中断，请先检查「下载」文件夹，必要时重新导出。"
+                    ? getString(R.string.export_interrupted)
                     : state.getString("exportMessage", exportJob.message);
             exportJob.failed = state.getBoolean("exportFailed");
         }
+        exportJob.activity = new WeakReference<>(this);
 
-        LinearLayout root = column();
-        root.setBackgroundColor(ui.surface);
-        root.setFocusableInTouchMode(true);
-        MaterialToolbar toolbar = new MaterialToolbar(this);
-        toolbar.setTitle("素笺");
-        toolbar.setSubtitle("ColorOS 便签 · " + versionName());
-        toolbar.setLogo(R.drawable.ic_toolbar_logo);
-        toolbar.setLogoAdjustViewBounds(false);
-        toolbar.setLogoScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
-        root.addView(toolbar, params(0));
-
-        LinearLayout content = column();
-        content.setPadding(ui.xl, ui.lg, ui.xl, ui.section);
-        TextView title = ui.text("分享，只留下内容。", DISPLAY, ui.ink);
-        heading(title);
-        content.addView(title, params(0));
-        content.addView(ui.text("隐藏水印，或留下一句自己的话。", BODY, ui.muted), params(ui.sm));
-
-        preview = panel(ui.primaryContainer, R.style.Shape_Sujian_Preview);
-        LinearLayout previewTop = new LinearLayout(this);
-        previewTop.setGravity(Gravity.CENTER_VERTICAL);
-        TextView previewLabel = ui.text("分享预览", LABEL, ui.onPrimaryContainer);
-        previewTop.addView(previewLabel, new LinearLayout.LayoutParams(0, -2, 1));
-        modeLabel = ui.text("无水印", CAPTION, ui.primary);
-        modeLabel.setPadding(ui.md, ui.sm, ui.md, ui.sm);
-        modeLabel.setBackground(ui.shape(ui.surface, R.style.Shape_Sujian_Pill));
-        previewTop.addView(modeLabel);
-        preview.addView(previewTop, params(0));
-        TextView sampleTitle = ui.text("留一点空白，\n给今天的灵感。", HEADLINE, ui.onPrimaryContainer);
-        preview.addView(sampleTitle, params(ui.lg));
-        TextView sampleBody = ui.text("一些想法，一点日常。\n每一次记录，都保留本来的样子。", BODY, ui.onPrimaryContainer);
-        preview.addView(sampleBody, params(ui.sm));
-        sampleTitle.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        sampleBody.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        previewFooter = column();
-        previewFooter.setPadding(0, ui.xl, 0, 0);
-        previewFooter.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
-        previewWatermark = ui.text("", CAPTION, ui.onPrimaryContainer);
-        previewWatermark.setGravity(Gravity.CENTER);
-        previewFooter.addView(previewWatermark, params(0));
-        preview.addView(previewFooter, params(0));
-        content.addView(preview, params(ui.xl));
-        previewCaption = ui.text("", CAPTION, ui.muted);
-        content.addView(previewCaption, params(ui.sm));
-
-        TextView settingsTitle = ui.text("水印设置", HEADLINE, ui.ink);
-        heading(settingsTitle);
-        content.addView(settingsTitle, params(ui.section));
-        inputLayout = new TextInputLayout(this, null, com.google.android.material.R.attr.textInputOutlinedStyle);
-        inputLayout.setHint("水印文字");
-        inputLayout.setHelperText("留空时，分享长图不显示水印");
-        inputLayout.setCounterEnabled(true);
-        inputLayout.setCounterMaxLength(80);
-        inputLayout.setEndIconMode(TextInputLayout.END_ICON_CLEAR_TEXT);
-        watermarkInput = new TextInputEditText(inputLayout.getContext());
-        watermarkInput.setId(0x1001);
-        watermarkInput.setSaveEnabled(false);
-        watermarkInput.setSingleLine(true);
-        watermarkInput.setFilters(new InputFilter[] { new InputFilter.LengthFilter(80) });
-        watermarkInput.setImeOptions(EditorInfo.IME_ACTION_DONE);
-        watermarkInput.setText(state == null ? prefs.getString(ConfigContract.KEY_WATERMARK_TEXT, "") : state.getString("draft", ""));
+        String saved = prefs.getString(ConfigContract.KEY_WATERMARK_TEXT, "");
+        boolean keepBlank = prefs.getBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, true);
+        mode = state != null ? state.getInt("mode")
+                : !saved.isEmpty() ? MODE_CUSTOM : keepBlank ? MODE_BLANK : MODE_HIDDEN;
+        watermarkInput.setText(state != null ? state.getString("draft", "")
+                : saved.isEmpty() ? prefs.getString(ConfigContract.KEY_LAST_CUSTOM_TEXT, "") : saved);
         watermarkInput.setSelection(watermarkInput.length());
-        watermarkInput.setOnEditorActionListener((v, action, event) -> {
-            if (action == EditorInfo.IME_ACTION_DONE) { save(); return true; }
-            return false;
-        });
-        inputLayout.addView(watermarkInput, new LinearLayout.LayoutParams(-1, -2));
-        content.addView(inputLayout, params(ui.lg));
 
-        LinearLayout spacingRow = new LinearLayout(this);
-        spacingRow.setGravity(Gravity.CENTER_VERTICAL);
-        spacingRow.setPadding(ui.lg, ui.md, ui.md, ui.md);
-        spacingRow.setBackground(ui.shape(ui.container, R.style.Shape_Sujian_Medium));
-        LinearLayout spacingText = column();
-        spacingText.addView(ui.text("保留底部留白", TITLE, ui.ink), params(0));
-        spacingText.addView(ui.text("水印为空时，留出约两行间距", CAPTION, ui.muted), params(ui.xs));
-        spacingText.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
-        spacingRow.addView(spacingText, new LinearLayout.LayoutParams(0, -2, 1));
-        keepBlankSpaceSwitch = new MaterialSwitch(this);
-        keepBlankSpaceSwitch.setContentDescription("保留底部留白，水印为空时留出约两行间距");
-        keepBlankSpaceSwitch.setMinWidth(ui.dimen(R.dimen.touch_target));
-        keepBlankSpaceSwitch.setMinHeight(ui.dimen(R.dimen.touch_target));
-        keepBlankSpaceSwitch.setSaveEnabled(false);
-        keepBlankSpaceSwitch.setChecked(state == null ? prefs.getBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, true) : state.getBoolean("keep", true));
-        spacingRow.addView(keepBlankSpaceSwitch);
-        content.addView(spacingRow, params(ui.lg));
-        clearButton = new MaterialButton(this, null, androidx.appcompat.R.attr.borderlessButtonStyle);
-        clearButton.setText("清空水印并保存");
-        clearButton.setMinHeight(ui.dimen(R.dimen.touch_target));
-        clearButton.setOnClickListener(v -> { watermarkInput.setText(""); save(); });
-        content.addView(clearButton, params(ui.sm));
-
-        View divider = new View(this);
-        divider.setBackgroundColor(ui.outline);
-        LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(-1, ui.dp(1));
-        dividerParams.topMargin = ui.xl;
-        content.addView(divider, dividerParams);
-        TextView exportTitle = ui.text("给记录，留一份备份", HEADLINE, ui.ink);
-        heading(exportTitle);
-        content.addView(exportTitle, params(ui.xl));
-        content.addView(ui.text("按分类整理为 ZIP，保存到系统「下载」文件夹。包含文本、HTML 与附件。", BODY, ui.muted), params(ui.sm));
-        TextView privacy = ui.text("加密便签会自动跳过", CAPTION, ui.onTertiaryContainer);
-        privacy.setPadding(ui.md, ui.sm, ui.md, ui.sm);
-        privacy.setBackground(ui.shape(ui.tertiaryContainer, R.style.Shape_Sujian_Small));
-        LinearLayout.LayoutParams privacyParams = params(ui.md);
-        privacyParams.width = -2;
-        content.addView(privacy, privacyParams);
-        exportButton = new MaterialButton(this, null, com.google.android.material.R.attr.materialButtonTonalStyle);
-        exportButton.setText("导出全部便签");
-        exportButton.setMinHeight(ui.dimen(R.dimen.touch_target));
-        exportButton.setOnClickListener(v -> startExport());
-        content.addView(exportButton, params(ui.lg));
-        exportProgress = (LinearProgressIndicator) getLayoutInflater().inflate(R.layout.export_progress, content, false);
-        content.addView(exportProgress, params(ui.md));
-        exportStatus = ui.text("", BODY, ui.muted);
-        exportStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        content.addView(exportStatus, params(ui.sm));
-        content.addView(ui.text("在模块管理器中启用素笺后，重新启动 ColorOS 便签。作用域已固定，无需手动添加。", CAPTION, ui.muted), params(ui.xl));
-
-        scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.setClipToPadding(false);
-        scroll.setId(0x1002);
-        FrameLayout centered = new FrameLayout(this);
-        centered.addView(content, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL));
-        scroll.addView(centered, new ScrollView.LayoutParams(-1, -2));
-        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-
-        FrameLayout dock = new FrameLayout(this);
-        dock.setBackgroundColor(ui.low);
-        LinearLayout actions = column();
-        actions.setPadding(ui.xl, ui.md, ui.xl, ui.md);
-        draftStatus = ui.text("", CAPTION, ui.muted);
-        draftStatus.setGravity(Gravity.CENTER);
-        actions.addView(draftStatus, params(0));
-        saveButton = (MaterialButton) getLayoutInflater().inflate(R.layout.save_button, actions, false);
-        saveButton.setOnClickListener(v -> save());
-        actions.addView(saveButton, params(ui.xs));
-        dock.addView(actions, new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER_HORIZONTAL));
-        root.addView(dock, params(0));
-        root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            int width = Math.min(r - l, ui.dimen(R.dimen.content_max_width));
-            for (View bounded : new View[] { content, actions }) {
-                if (bounded.getLayoutParams().width != width) {
-                    bounded.getLayoutParams().width = width;
-                    bounded.requestLayout();
+        modeGroup.check(modeButtons[mode].getId());
+        modeGroup.addOnButtonCheckedListener((group, id, checked) -> {
+            if (!checked) return;
+            for (int i = 0; i < modeButtons.length; i++) {
+                if (modeButtons[i].getId() == id && mode != i) {
+                    mode = i;
+                    animate();
+                    render();
+                    save();
                 }
             }
         });
-        setContentView(root);
         watermarkInput.addTextChangedListener(new TextWatcher() {
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            public void onTextChanged(CharSequence s, int start, int before, int count) { updateDraft(); }
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                render();
+                save();
+            }
             public void afterTextChanged(Editable text) {}
         });
-        keepBlankSpaceSwitch.setOnCheckedChangeListener((v, checked) -> updateDraft());
-        updateDraft();
-        exportJob.activity = new WeakReference<>(this);
-        updateExport();
+        watermarkInput.setOnEditorActionListener((view, action, event) -> {
+            if (action != EditorInfo.IME_ACTION_DONE) return false;
+            flush();
+            hideKeyboard();
+            return true;
+        });
+        statusRow.setOnClickListener(v -> checkModule());
+        exportButton.setOnClickListener(v -> startExport());
+
+        render();
+        renderExport();
+        renderStatus();
+        checkModule();
         if (state != null) scroll.post(() -> scroll.scrollTo(0, state.getInt("scroll")));
+    }
+
+    private void bind() {
+        scroll = findViewById(R.id.scroll);
+        content = findViewById(R.id.content);
+        statusRow = findViewById(R.id.statusRow);
+        statusText = findViewById(R.id.statusText);
+        statusSpinner = findViewById(R.id.statusSpinner);
+        statusIcon = findViewById(R.id.statusIcon);
+        statusTitle = findViewById(R.id.statusTitle);
+        statusDetail = findViewById(R.id.statusDetail);
+        previewSheet = findViewById(R.id.previewSheet);
+        previewFooter = findViewById(R.id.previewFooter);
+        previewDivider = findViewById(R.id.previewDivider);
+        previewWatermark = findViewById(R.id.previewWatermark);
+        sampleTitle = findViewById(R.id.sampleTitle);
+        sampleBody = findViewById(R.id.sampleBody);
+        modeGroup = findViewById(R.id.modeGroup);
+        modeButtons = new MaterialButton[] {
+            findViewById(R.id.modeHidden), findViewById(R.id.modeBlank), findViewById(R.id.modeCustom),
+        };
+        modeDetail = findViewById(R.id.modeDetail);
+        inputLayout = findViewById(R.id.inputLayout);
+        watermarkInput = findViewById(R.id.watermarkInput);
+        exportButton = findViewById(R.id.exportButton);
+        exportProgress = findViewById(R.id.exportProgress);
+        exportStatus = findViewById(R.id.exportStatus);
+        exportPrivacy = findViewById(R.id.exportPrivacy);
+        exportPrivacyIcon = findViewById(R.id.exportPrivacyIcon);
+        versionLabel = findViewById(R.id.versionLabel);
+    }
+
+    /** Everything a token cannot express in XML: tinted shapes, limits, measured layout. */
+    private void paint() {
+        previewSheet.setBackground(ui.outlinedShape(ui.sheet, ui.outline, R.style.Shape_Sujian_Sheet));
+        previewDivider.setBackgroundColor(ui.outline);
+        exportPrivacy.setTextColor(ui.tertiary);
+        exportPrivacyIcon.setImageTintList(android.content.res.ColorStateList.valueOf(ui.tertiary));
+        watermarkInput.setFilters(new InputFilter[] { new InputFilter.LengthFilter(80) });
+        versionLabel.setText(getString(R.string.version_footer, versionName()));
+        heading(findViewById(R.id.shareSection));
+        heading(findViewById(R.id.exportSection));
+        for (View child : new View[] { sampleTitle, sampleBody, previewFooter }) {
+            child.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        }
+        previewSheet.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        exportStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        statusText.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        content.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            int width = Math.min(((ViewGroup) content.getParent()).getWidth(),
+                    ui.dimen(R.dimen.content_max_width));
+            if (width > 0 && content.getLayoutParams().width != width) {
+                content.getLayoutParams().width = width;
+                content.requestLayout();
+            }
+            stackModesIfCramped(r - l - content.getPaddingLeft() - content.getPaddingRight());
+        });
+    }
+
+    /**
+     * Three segments side by side stop being readable long before the text is
+     * ellipsised, so at large font sizes or on narrow screens they stack instead.
+     */
+    private void stackModesIfCramped(int available) {
+        if (available <= 0) return;
+        float widest = 0;
+        for (MaterialButton button : modeButtons) {
+            widest = Math.max(widest, button.getPaint().measureText(button.getText().toString()));
+        }
+        boolean stack = (widest + ui.dimen(R.dimen.segment_padding)) * modeButtons.length > available;
+        int orientation = stack ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL;
+        if (modeGroup.getOrientation() == orientation) return;
+        modeGroup.setOrientation(orientation);
+        for (MaterialButton button : modeButtons) {
+            LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) button.getLayoutParams();
+            params.width = stack ? LinearLayout.LayoutParams.MATCH_PARENT : 0;
+            params.weight = stack ? 0 : 1;
+            button.setLayoutParams(params);
+        }
     }
 
     private String versionName() {
@@ -229,57 +219,141 @@ public final class ConfigActivity extends Activity {
         catch (Exception ignored) { return ""; }
     }
 
-    private boolean dirty() {
-        return !watermarkInput.getText().toString().trim().equals(prefs.getString(ConfigContract.KEY_WATERMARK_TEXT, ""))
-                || keepBlankSpaceSwitch.isChecked() != prefs.getBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, true);
+    private String draft() { return watermarkInput.getText().toString().trim(); }
+
+    // ---------------------------------------------------------------- rendering
+
+    /** The preview mirrors exactly what {@link Main} does to the real footer row. */
+    private void render() {
+        boolean custom = mode == MODE_CUSTOM;
+        boolean written = custom && !draft().isEmpty();
+        previewFooter.setVisibility(mode == MODE_HIDDEN ? View.GONE : View.VISIBLE);
+        previewDivider.setVisibility(written ? View.VISIBLE : View.INVISIBLE);
+        previewWatermark.setVisibility(written ? View.VISIBLE : View.INVISIBLE);
+        previewWatermark.setText(written ? draft() : getString(R.string.preview_sample_watermark));
+
+        modeDetail.setText(mode == MODE_HIDDEN ? getString(R.string.mode_hidden_detail)
+                : mode == MODE_BLANK ? getString(R.string.mode_blank_detail)
+                : written ? getString(R.string.mode_custom_detail)
+                : getString(R.string.mode_custom_empty));
+        inputLayout.setVisibility(custom ? View.VISIBLE : View.GONE);
+        inputLayout.setError(custom && !written ? getString(R.string.watermark_error) : null);
+        previewSheet.setContentDescription(getString(R.string.share_section) + "：" + modeDetail.getText()
+                + (written ? draft() : ""));
     }
 
-    private void updateDraft() {
-        String value = watermarkInput.getText().toString().trim();
-        boolean blank = value.isEmpty();
-        int visibility = blank && !keepBlankSpaceSwitch.isChecked() ? View.GONE : View.VISIBLE;
-        if (previewFooter.getVisibility() != visibility) ui.animateLayout(preview);
-        previewFooter.setVisibility(visibility);
-        modeLabel.setText(blank ? "无水印" : "自定义");
-        previewWatermark.setText(blank ? " " : value);
-        previewCaption.setText(blank ? (keepBlankSpaceSwitch.isChecked() ? "不显示水印 · 保留底部留白" : "不显示水印 · 收起底部区域") : "自定义文字 · 以便签实际分享效果为准");
-        previewCaption.setContentDescription("示意预览：" + (blank ? previewCaption.getText() : "水印为" + value + "，以便签实际分享效果为准"));
-        boolean changed = dirty();
-        draftStatus.setText(changed ? "有未保存的修改 · 保存后应用到分享长图" : "设置已保存 · 重新打开便签分享页后生效");
-        draftStatus.setTextColor(changed ? ui.primary : ui.muted);
-        saveButton.setEnabled(changed);
-        saveButton.setText(changed ? "保存设置" : "已保存");
-        clearButton.setEnabled(watermarkInput.length() > 0);
+    /**
+     * A module that works needs no container: a glyph and a line of text, level with
+     * everything else on the page. Only a module that is not working gets a filled
+     * surface and a second line saying what to do about it.
+     */
+    private void renderStatus() {
+        boolean quiet = status == STATUS_ACTIVE || status == STATUS_CHECKING;
+        int foreground = status == STATUS_CHECKING ? ui.muted
+                : status == STATUS_ACTIVE ? ui.tertiary
+                : status == STATUS_STALE ? ui.onSecondaryContainer : ui.onErrorContainer;
+        statusRow.setBackground(quiet ? null : ui.shape(
+                status == STATUS_STALE ? ui.secondaryContainer : ui.errorContainer,
+                R.style.Shape_Sujian_Medium));
+        int inset = quiet ? 0 : ui.lg;
+        statusRow.setPadding(inset, quiet ? 0 : ui.md, inset, quiet ? 0 : ui.md);
+
+        statusSpinner.setVisibility(status == STATUS_CHECKING ? View.VISIBLE : View.GONE);
+        statusIcon.setVisibility(status == STATUS_CHECKING ? View.GONE : View.VISIBLE);
+        statusIcon.setImageResource(status == STATUS_ACTIVE
+                ? R.drawable.ic_status_active : R.drawable.ic_status_alert);
+        statusIcon.setImageTintList(android.content.res.ColorStateList.valueOf(foreground));
+
+        statusTitle.setText(status == STATUS_CHECKING ? R.string.status_checking
+                : status == STATUS_ACTIVE ? R.string.status_active
+                : status == STATUS_STALE ? R.string.status_stale
+                : status == STATUS_MISSING ? R.string.status_missing : R.string.status_inactive);
+        statusTitle.setTextColor(foreground);
+        statusDetail.setTextColor(foreground);
+        statusDetail.setVisibility(quiet ? View.GONE : View.VISIBLE);
+        if (!quiet) {
+            statusDetail.setText(status == STATUS_STALE ? R.string.status_stale_detail
+                    : status == STATUS_MISSING ? R.string.status_missing_detail
+                    : R.string.status_inactive_detail);
+        }
+        statusRow.setContentDescription(statusTitle.getText()
+                + (quiet ? "" : "。" + statusDetail.getText())
+                + "。" + getString(R.string.status_recheck));
     }
 
+    private void renderExport() {
+        exportButton.setEnabled(!exportJob.running);
+        exportButton.setText(exportJob.running ? R.string.export_running
+                : exportJob.failed ? R.string.export_retry : R.string.export_action);
+        exportProgress.setVisibility(exportJob.running ? View.VISIBLE : View.GONE);
+        exportStatus.setVisibility(exportJob.message.isEmpty() ? View.GONE : View.VISIBLE);
+        exportStatus.setText(exportJob.message);
+        exportStatus.setTextColor(exportJob.failed ? ui.onErrorContainer : ui.muted);
+        exportStatus.setBackground(exportJob.failed
+                ? ui.shape(ui.errorContainer, R.style.Shape_Sujian_Small) : null);
+        int padding = exportJob.failed ? ui.md : 0;
+        exportStatus.setPadding(padding, padding, padding, padding);
+    }
+
+    // ------------------------------------------------------------------ saving
+
+    /** Choices apply on their own; the delay only keeps typing out of every keystroke. */
     private void save() {
-        String watermark = watermarkInput.getText().toString().trim();
-        prefs.edit().putString(ConfigContract.KEY_WATERMARK_TEXT, watermark)
-                .putBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, keepBlankSpaceSwitch.isChecked()).apply();
-        watermarkInput.setText(watermark);
-        watermarkInput.setSelection(watermark.length());
+        main.removeCallbacks(persist);
+        main.postDelayed(persist, SAVE_DELAY_MS);
+    }
+
+    private void flush() {
+        main.removeCallbacks(persist);
+        persist();
+    }
+
+    private void persist() {
+        String watermark = mode == MODE_CUSTOM ? draft() : "";
+        boolean keepBlank = mode != MODE_HIDDEN;
+        if (watermark.equals(prefs.getString(ConfigContract.KEY_WATERMARK_TEXT, ""))
+                && keepBlank == prefs.getBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, true)) {
+            return;
+        }
+        SharedPreferences.Editor edit = prefs.edit()
+                .putString(ConfigContract.KEY_WATERMARK_TEXT, watermark)
+                .putBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, keepBlank);
+        if (!watermark.isEmpty()) edit.putString(ConfigContract.KEY_LAST_CUSTOM_TEXT, watermark);
+        edit.apply();
+        previewSheet.announceForAccessibility(getString(R.string.apply_announcement));
+    }
+
+    /** Nothing off-screen needs to animate, and a transition cut short by a stop would
+     *  leave the scene root's layout suppressed. */
+    private void animate() {
+        if (resumed) ui.animate(content);
+    }
+
+    private void hideKeyboard() {
         watermarkInput.clearFocus();
         InputMethodManager keyboard = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
         if (keyboard != null) keyboard.hideSoftInputFromWindow(watermarkInput.getWindowToken(), 0);
-        updateDraft();
-        draftStatus.announceForAccessibility("设置已保存，重新打开便签分享页后生效");
-        Toast.makeText(this, "已保存，重新打开便签分享页后生效", Toast.LENGTH_SHORT).show();
     }
 
-    @Override public void onBackPressed() {
-        if (!dirty()) { super.onBackPressed(); return; }
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
-                .setTitle("保存这次修改？")
-                .setMessage("水印设置尚未保存。保存后，重新打开便签分享页即可生效。")
-                .setPositiveButton("保存并退出", (d, which) -> { save(); finish(); })
-                .setNegativeButton("放弃修改", (d, which) -> finish())
-                .setNeutralButton("继续编辑", null).create();
-        dialog.show();
+    @Override protected void onRestart() {
+        super.onRestart();
+        if (status != STATUS_ACTIVE) checkModule();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        resumed = true;
+    }
+
+    @Override protected void onPause() {
+        resumed = false;
+        flush();
+        super.onPause();
     }
 
     @Override protected void onSaveInstanceState(Bundle out) {
+        out.putInt("mode", mode);
         out.putString("draft", watermarkInput.getText().toString());
-        out.putBoolean("keep", keepBlankSpaceSwitch.isChecked());
         out.putInt("scroll", scroll.getScrollY());
         out.putString("exportMessage", exportJob.message);
         out.putBoolean("exportRunning", exportJob.running);
@@ -290,39 +364,75 @@ public final class ConfigActivity extends Activity {
     @Override public Object onRetainNonConfigurationInstance() { return exportJob; }
 
     @Override protected void onDestroy() {
+        main.removeCallbacks(persist);
         if (exportJob.activity.get() == this) exportJob.activity.clear();
         super.onDestroy();
     }
+
+    // ------------------------------------------------------------ module status
+
+    /**
+     * Asks the injected code, inside the Notes process, to identify itself. A missing
+     * answer means the module is installed but not actually hooking anything.
+     */
+    private void checkModule() {
+        if (checking) return;
+        checking = true;
+        status = STATUS_CHECKING;
+        renderStatus();
+        final String expected = versionName();
+        final Context context = getApplicationContext();
+        new Thread(() -> {
+            final int result = probe(context, expected);
+            main.post(() -> {
+                checking = false;
+                if (isFinishing() || isDestroyed()) return;
+                status = result;
+                animate();
+                renderStatus();
+            });
+        }, "note-watermark-status").start();
+    }
+
+    private static int probe(Context context, String expected) {
+        try {
+            context.getPackageManager().getPackageInfo(ConfigContract.NOTE_PKG, 0);
+        } catch (Exception missing) {
+            return STATUS_MISSING;
+        }
+        try (Cursor cursor = context.getContentResolver()
+                .query(ConfigContract.STATUS_URI, null, null, null, null)) {
+            if (cursor == null || !cursor.moveToFirst()) return STATUS_INACTIVE;
+            int column = cursor.getColumnIndex(ConfigContract.COLUMN_MODULE_VERSION);
+            if (column < 0 || cursor.isNull(column)) return STATUS_INACTIVE;
+            return expected.equals(cursor.getString(column)) ? STATUS_ACTIVE : STATUS_STALE;
+        } catch (Exception unhooked) {
+            return STATUS_INACTIVE;
+        }
+    }
+
+    // ------------------------------------------------------------------ export
 
     private void startExport() {
         if (exportJob.running) return;
         exportJob.running = true;
         exportJob.failed = false;
-        exportJob.message = "正在整理便签与附件，请稍候…";
-        updateExport();
+        exportJob.message = getString(R.string.export_working);
+        animate();
+        renderExport();
         final ExportJob job = exportJob;
         new Thread(() -> {
             String result = job.exportThroughNotes();
-            new Handler(Looper.getMainLooper()).post(() -> {
+            main.post(() -> {
                 job.message = result;
                 job.running = false;
                 ConfigActivity activity = job.activity.get();
-                if (activity != null && !activity.isFinishing()) activity.updateExport();
+                if (activity != null && !activity.isFinishing()) {
+                    activity.animate();
+                    activity.renderExport();
+                }
             });
         }, "note-watermark-export").start();
-    }
-
-    private void updateExport() {
-        exportButton.setEnabled(!exportJob.running);
-        exportButton.setText(exportJob.running ? "正在导出…" : "导出全部便签");
-        exportProgress.setVisibility(exportJob.running ? View.VISIBLE : View.GONE);
-        exportStatus.setText(exportJob.message);
-        exportStatus.setTextColor(exportJob.failed ? ui.onErrorContainer : ui.muted);
-        exportStatus.setBackground(exportJob.failed ? ui.shape(ui.errorContainer, R.style.Shape_Sujian_Small) : null);
-        int padding = exportJob.failed ? ui.md : 0;
-        exportStatus.setPadding(padding, padding, padding, padding);
-        if (exportJob.failed) exportButton.setText("重试导出");
-        exportStatus.setVisibility(exportJob.message.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
     /** Retained worker only holds application context; rotation neither leaks nor duplicates export. */
@@ -345,33 +455,20 @@ public final class ConfigActivity extends Activity {
                 }
             } catch (Exception ignored) { /* The hook may need a cold start. */ }
             Intent intent = context.getPackageManager().getLaunchIntentForPackage(ConfigContract.NOTE_PKG);
-            if (intent == null) { failed = true; return "未找到 ColorOS 便签，请先安装便签应用。"; }
+            if (intent == null) {
+                failed = true;
+                return context.getString(R.string.export_missing_notes);
+            }
             context.getSharedPreferences(ConfigContract.PREFS, 0).edit()
                     .putLong(ConfigContract.KEY_EXPORT_REQUEST, System.currentTimeMillis()).apply();
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             try { context.startActivity(intent); }
-            catch (Exception ignored) { failed = true; return "无法打开便签。请手动打开便签，并确认模块已启用。"; }
-            return "已请求导出。请留意便签内的完成提示；若无响应，请确认模块已启用并重新启动便签。";
+            catch (Exception ignored) {
+                failed = true;
+                return context.getString(R.string.export_cannot_open);
+            }
+            return context.getString(R.string.export_requested);
         }
-    }
-
-    private LinearLayout column() {
-        LinearLayout v = new LinearLayout(this);
-        v.setOrientation(LinearLayout.VERTICAL);
-        return v;
-    }
-
-    private LinearLayout panel(int color, int shape) {
-        LinearLayout v = column();
-        v.setPadding(ui.xl, ui.lg, ui.xl, ui.xl);
-        v.setBackground(ui.shape(color, shape));
-        return v;
-    }
-
-    private LinearLayout.LayoutParams params(int top) {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
-        p.topMargin = top;
-        return p;
     }
 
     private void heading(TextView view) {

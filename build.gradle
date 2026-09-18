@@ -7,8 +7,8 @@ android {
         applicationId 'com.jy.notewatermark'
         minSdk 26
         targetSdk 34
-        versionCode 10
-        versionName '3.1.1'
+        versionCode 11
+        versionName '3.2.0'
     }
     sourceSets {
         main {
@@ -19,6 +19,8 @@ android {
         }
     }
     buildTypes { release { minifyEnabled false } }
+    // The hook reports BuildConfig.VERSION_NAME so the UI can spot a stale injected copy.
+    buildFeatures { buildConfig true }
     // lintVital pulls a large toolchain that cannot be resolved on this network.
     lint { checkReleaseBuilds false }
     compileOptions {

@@ -2,7 +2,6 @@
 """Compile the path-only SVG artwork into Android vectors (Python stdlib only)."""
 from pathlib import Path
 import argparse
-import copy
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,14 +10,6 @@ ANDROID = 'http://schemas.android.com/apk/res/android'
 AAPT = 'http://schemas.android.com/aapt'
 ET.register_namespace('android', ANDROID)
 ET.register_namespace('aapt', AAPT)
-
-# The toolbar mark is the foreground glyph cropped to its own extent in the artwork space,
-# so it fills a 28 dp app bar slot without the adaptive icon's outer margin.
-MARK_BOX = (33, 30, 52)
-# The corner plate of the foreground is painted in the background colour; on the launcher
-# icon it merges with the background, but on a toolbar it would sit there as a pale square.
-MARK_PLATE = 'M70 66H84V82H70Z'
-
 
 def attrs(**values):
     return {f'{{{ANDROID}}}{key}': str(value) for key, value in values.items()}
@@ -56,16 +47,6 @@ def vector(paths, gradients, *, size=108, viewport=108, translate=None, clip=Non
     return result
 
 
-def mark(paths, gradients):
-    x, y, extent = MARK_BOX
-    cropped = []
-    for source in paths:
-        path = copy.deepcopy(source)
-        path.set('d', path.get('d').replace(MARK_PLATE, '').strip())
-        cropped.append(path)
-    return vector(cropped, gradients, size=28, viewport=extent, translate=(-x, -y))
-
-
 def generate():
     svg = ET.parse(ROOT / 'artwork/icon.svg').getroot()
     gradients = {g.attrib['id']: g for g in svg.iter(SVG + 'linearGradient')}
@@ -75,7 +56,6 @@ def generate():
         'drawable/ic_launcher_background.xml': vector(layers['background'], gradients),
         'drawable/ic_launcher_foreground.xml': vector(layers['foreground'], gradients),
         'drawable/ic_launcher_monochrome.xml': vector(mono, {}),
-        'drawable/ic_toolbar_logo.xml': mark(layers['foreground'], gradients),
         'mipmap-anydpi/ic_launcher.xml': vector(layers['background'] + layers['foreground'],
             gradients, size=48, viewport=72, translate=(-18, -18), clip=
             'M40 18H68Q90 18 90 40V68Q90 90 68 90H40Q18 90 18 68V40Q18 18 40 18Z'),

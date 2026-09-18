@@ -1,11 +1,17 @@
 <resources>
+    <!-- Spacing scale: every gap on the screen comes from one of these. -->
     <dimen name="space_xs">4dp</dimen>
     <dimen name="space_sm">8dp</dimen>
     <dimen name="space_md">12dp</dimen>
     <dimen name="space_lg">16dp</dimen>
     <dimen name="space_xl">24dp</dimen>
     <dimen name="space_section">32dp</dimen>
+
+    <!-- Sizes -->
     <dimen name="content_max_width">680dp</dimen>
     <dimen name="touch_target">48dp</dimen>
-    <dimen name="elevation_flat">0dp</dimen>
+    <dimen name="icon_status">22dp</dimen>
+    <dimen name="icon_inline">16dp</dimen>
+    <dimen name="hairline">1dp</dimen>
+    <dimen name="segment_padding">32dp</dimen>
 </resources>
