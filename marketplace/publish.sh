@@ -10,8 +10,8 @@ PKG=com.jy.notewatermark
 ORG_REPO="Xposed-Modules-Repo/$PKG"
 GH=/data/data/com.termux/files/usr/bin/gh
 APK="$ROOT/build/NoteWatermark.apk"
-VERSION="3.1.0"
-TAG="9-$VERSION"
+VERSION="3.1.1"
+TAG="10-$VERSION"
 
 if [ ! -f "$APK" ]; then
   echo "missing $APK - run ./build.sh first"

@@ -2,6 +2,7 @@
 """Compile the path-only SVG artwork into Android vectors (Python stdlib only)."""
 from pathlib import Path
 import argparse
+import copy
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,20 +12,26 @@ AAPT = 'http://schemas.android.com/aapt'
 ET.register_namespace('android', ANDROID)
 ET.register_namespace('aapt', AAPT)
 
+# The toolbar mark is the foreground glyph cropped to its own extent in the artwork space,
+# so it fills a 28 dp app bar slot without the adaptive icon's outer margin.
+MARK_BOX = (33, 30, 52)
+# The corner plate of the foreground is painted in the background colour; on the launcher
+# icon it merges with the background, but on a toolbar it would sit there as a pale square.
+MARK_PLATE = 'M70 66H84V82H70Z'
+
 
 def attrs(**values):
     return {f'{{{ANDROID}}}{key}': str(value) for key, value in values.items()}
 
 
-def vector(paths, gradients, *, legacy=False):
-    result = ET.Element('vector', attrs(width='48dp' if legacy else '108dp',
-        height='48dp' if legacy else '108dp', viewportWidth=72 if legacy else 108,
-        viewportHeight=72 if legacy else 108))
+def vector(paths, gradients, *, size=108, viewport=108, translate=None, clip=None):
+    result = ET.Element('vector', attrs(width=f'{size}dp', height=f'{size}dp',
+        viewportWidth=viewport, viewportHeight=viewport))
     parent = result
-    if legacy:
-        parent = ET.SubElement(result, 'group', attrs(translateX=-18, translateY=-18))
-        ET.SubElement(parent, 'clip-path', attrs(pathData=
-            'M40 18H68Q90 18 90 40V68Q90 90 68 90H40Q18 90 18 68V40Q18 18 40 18Z'))
+    if translate:
+        parent = ET.SubElement(result, 'group', attrs(translateX=translate[0], translateY=translate[1]))
+    if clip:
+        ET.SubElement(parent, 'clip-path', attrs(pathData=clip))
     for source in paths:
         if source.tag != SVG + 'path':
             raise ValueError('Artwork layers must contain only paths')
@@ -49,6 +56,16 @@ def vector(paths, gradients, *, legacy=False):
     return result
 
 
+def mark(paths, gradients):
+    x, y, extent = MARK_BOX
+    cropped = []
+    for source in paths:
+        path = copy.deepcopy(source)
+        path.set('d', path.get('d').replace(MARK_PLATE, '').strip())
+        cropped.append(path)
+    return vector(cropped, gradients, size=28, viewport=extent, translate=(-x, -y))
+
+
 def generate():
     svg = ET.parse(ROOT / 'artwork/icon.svg').getroot()
     gradients = {g.attrib['id']: g for g in svg.iter(SVG + 'linearGradient')}
@@ -58,7 +75,10 @@ def generate():
         'drawable/ic_launcher_background.xml': vector(layers['background'], gradients),
         'drawable/ic_launcher_foreground.xml': vector(layers['foreground'], gradients),
         'drawable/ic_launcher_monochrome.xml': vector(mono, {}),
-        'mipmap-anydpi/ic_launcher.xml': vector(layers['background'] + layers['foreground'], gradients, legacy=True),
+        'drawable/ic_toolbar_logo.xml': mark(layers['foreground'], gradients),
+        'mipmap-anydpi/ic_launcher.xml': vector(layers['background'] + layers['foreground'],
+            gradients, size=48, viewport=72, translate=(-18, -18), clip=
+            'M40 18H68Q90 18 90 40V68Q90 90 68 90H40Q18 90 18 68V40Q18 18 40 18Z'),
     }
     for api in (26, 33):
         adaptive = ET.Element('adaptive-icon')

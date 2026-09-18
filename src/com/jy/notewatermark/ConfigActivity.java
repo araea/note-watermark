@@ -68,8 +68,8 @@ public final class ConfigActivity extends Activity {
         MaterialToolbar toolbar = new MaterialToolbar(this);
         toolbar.setTitle("素笺");
         toolbar.setSubtitle("ColorOS 便签 · " + versionName());
-        toolbar.setLogo(getApplicationInfo().loadIcon(getPackageManager()));
-        toolbar.setLogoAdjustViewBounds(true);
+        toolbar.setLogo(R.drawable.ic_toolbar_logo);
+        toolbar.setLogoAdjustViewBounds(false);
         toolbar.setLogoScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         root.addView(toolbar, params(0));
 
