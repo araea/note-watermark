@@ -1,0 +1,11 @@
+<resources>
+    <dimen name="space_xs">4dp</dimen>
+    <dimen name="space_sm">8dp</dimen>
+    <dimen name="space_md">12dp</dimen>
+    <dimen name="space_lg">16dp</dimen>
+    <dimen name="space_xl">24dp</dimen>
+    <dimen name="space_section">32dp</dimen>
+    <dimen name="content_max_width">680dp</dimen>
+    <dimen name="touch_target">48dp</dimen>
+    <dimen name="elevation_flat">0dp</dimen>
+</resources>

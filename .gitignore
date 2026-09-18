@@ -12,3 +12,5 @@ libs/*.jar
 .DS_Store
 libs/arm64-v8a/
 lib/
+.gradle/
+local.properties

@@ -10,6 +10,8 @@ ColorOS 便签模块：移除或自定义分享长图底部的水印，并把全
 
 Material 3 Expressive 风格，支持系统深浅色，Android 12 起跟随系统动态配色。设置页提供实时示意预览、80 字输入计数与未保存提示。旋转屏幕时保留草稿与进行中的导出状态。
 
+色彩、字级、形状与动效 token 整理在 [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md)，改界面前先读它。
+
 <details>
 <summary>查看浅色与深色界面</summary>
 
@@ -35,14 +37,22 @@ Material 3 Expressive 风格，支持系统深浅色，Android 12 起跟随系�
 
 ## 构建与测试
 
+需要 JDK 17 以上与 Android SDK（platform 35、build-tools 35.0.0），SDK 路径写进 `local.properties` 的 `sdk.dir`。Termux 下 `build.sh` 会改用系统 `aapt2`。
+
 ```sh
-curl -fsSL -o libs/r8.jar https://maven.google.com/com/android/tools/r8/8.9.35/r8-8.9.35.jar
 ./build.sh
 ```
 
-产物为 `build/NoteWatermark.apk`。模块按 `io.github.libxposed:api:102.0.0` 构建，该依赖只用于编译，不打进 APK；`build.sh` 会在缺少时从 Maven Central 取到 `libs/libxposed-api-102.jar`。首次构建会在 `keystore/` 生成签名密钥，该目录不纳入 Git。更换密钥后，旧版本需先卸载才能安装新包。
+产物为 `build/NoteWatermark.apk`。模块按 `com.google.android.material:material:1.14.0` 与 `io.github.libxposed:api:102.0.0` 构建，libxposed 依赖只用于编译，不打进 APK。首次构建会在 `keystore/` 生成签名密钥，该目录不纳入 Git。更换密钥后，旧版本需先卸载才能安装新包。
 
-`bash tests/build.sh` 构建独立的真机测试包，用同一签名安装后执行 `am instrument -w com.jy.notewatermark.test/.DesignSmoke`。测试不导出真实便签，结束后恢复原设置。
+真机测试包另外需要 R8：
+
+```sh
+curl -fsSL -o libs/r8.jar https://maven.google.com/com/android/tools/r8/8.9.35/r8-8.9.35.jar
+bash tests/build.sh
+```
+
+用同一签名安装后执行 `am instrument -w com.jy.notewatermark.test/.DesignSmoke`。测试不导出真实便签，结束后恢复原设置，并把浅色、深色与大字号三组界面截图写到应用私有目录。
 
 ## 许可证
 

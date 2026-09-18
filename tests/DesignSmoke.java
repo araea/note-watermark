@@ -12,14 +12,14 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ScrollView;
-import android.widget.Switch;
+import android.widget.CompoundButton;
 import android.widget.TextView;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.lang.reflect.Field;
 import java.util.Map;
 
-/** Device UI smoke test, isolated from QQ and the real Notes database. */
+/** Device UI regression checks; never exports the real Notes database. */
 public final class DesignSmoke extends Instrumentation {
     private boolean dark;
     private float fontScale = 1f;
@@ -51,6 +51,8 @@ public final class DesignSmoke extends Instrumentation {
             launch();
             runOnMainSync(() -> {
                 check(!view("saveButton").isEnabled(), "clean settings disable save");
+                check(view("saveButton").getClass().getName().equals("com.google.android.material.button.MaterialButton"), "official MaterialButton");
+                check(toggle().getClass().getName().equals("com.google.android.material.materialswitch.MaterialSwitch"), "official MaterialSwitch");
                 edit().setText("  M3 Expressive  ");
                 check(view("saveButton").isEnabled(), "draft enables save");
                 check(text("previewWatermark").getText().toString().equals("M3 Expressive"), "live trimmed preview");
@@ -82,6 +84,15 @@ public final class DesignSmoke extends Instrumentation {
                 set(job, "running", false);
                 set(job, "message", "");
                 view("clearButton").performClick();
+                set(job, "failed", true);
+                set(job, "message", "测试错误：请重试");
+                invoke(activity, "updateExport");
+                check(text("exportButton").getText().toString().equals("重试导出"), "error offers retry");
+                check(view("exportButton").isEnabled(), "retry enabled");
+                set(job, "failed", false);
+                set(job, "message", "");
+                invoke(activity, "updateExport");
+                check(view("exportStatus").getVisibility() == View.GONE, "empty export state hidden");
             });
             close();
             launch();
@@ -153,6 +164,11 @@ public final class DesignSmoke extends Instrumentation {
             checkContrast(ui, "muted", "container");
             checkContrast(ui, "onPrimary", "primary");
             checkContrast(ui, "onPrimaryContainer", "primaryContainer");
+            checkContrast(ui, "onSecondary", "secondary");
+            checkContrast(ui, "onSecondaryContainer", "secondaryContainer");
+            checkContrast(ui, "onTertiary", "tertiary");
+            checkContrast(ui, "onTertiaryContainer", "tertiaryContainer");
+            checkContrast(ui, "onErrorContainer", "errorContainer");
             try {
                 File directory = new File(getTargetContext().getFilesDir(), "design-review");
                 directory.mkdirs();
@@ -160,6 +176,16 @@ public final class DesignSmoke extends Instrumentation {
                     image.compress(Bitmap.CompressFormat.PNG, 100, out);
                 }
                 image.recycle();
+                View viewport = activity.getWindow().getDecorView();
+                float viewportScale = 600f / viewport.getWidth();
+                Bitmap screen = Bitmap.createBitmap(600, Math.round(viewport.getHeight() * viewportScale), Bitmap.Config.ARGB_8888);
+                Canvas screenCanvas = new Canvas(screen);
+                screenCanvas.scale(viewportScale, viewportScale);
+                viewport.draw(screenCanvas);
+                try (FileOutputStream out = new FileOutputStream(new File(directory, name + "-viewport.png"))) {
+                    screen.compress(Bitmap.CompressFormat.PNG, 100, out);
+                }
+                screen.recycle();
             } catch (Exception error) { throw new RuntimeException(error); }
         });
     }
@@ -202,13 +228,17 @@ public final class DesignSmoke extends Instrumentation {
     private View view(String name) { return (View) field(activity, name); }
     private TextView text(String name) { return (TextView) view(name); }
     private EditText edit() { return (EditText) view("watermarkInput"); }
-    private Switch toggle() { return (Switch) view("keepBlankSpaceSwitch"); }
+    private CompoundButton toggle() { return (CompoundButton) view("keepBlankSpaceSwitch"); }
     private void check(boolean condition, String message) {
         if (!condition) throw new AssertionError(message);
         report.append("  ok ").append(message).append('\n');
     }
     private static Object field(Object target, String name) {
         try { Field field = target.getClass().getDeclaredField(name); field.setAccessible(true); return field.get(target); }
+        catch (Exception error) { throw new RuntimeException(error); }
+    }
+    private static void invoke(Object target, String name) {
+        try { java.lang.reflect.Method method = target.getClass().getDeclaredMethod(name); method.setAccessible(true); method.invoke(target); }
         catch (Exception error) { throw new RuntimeException(error); }
     }
     private static void set(Object target, String name, Object value) {
