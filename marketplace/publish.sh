@@ -1,25 +1,45 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# Push marketplace metadata + release to Xposed-Modules-Repo/com.jy.notewatermark
+# Publish to the module marketplace (Xposed-Modules-Repo/com.jy.notewatermark).
+# Releases live only in the marketplace; the source repo carries none.
 #
 #   ./publish.sh                  push metadata, then create the release for $TAG
 #   ./publish.sh --metadata-only  push only SUMMARY/README/SOURCE_URL/icon (no release)
 set -euo pipefail
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 MP="$ROOT/marketplace"
+GRADLE="$ROOT/build.gradle"
 PKG=com.jy.notewatermark
 ORG_REPO="Xposed-Modules-Repo/$PKG"
 GH=/data/data/com.termux/files/usr/bin/gh
 APK="$ROOT/build/NoteWatermark.apk"
-VERSION="3.2.0"
-TAG="11-$VERSION"
+
+CODE=$(sed -n "s/.*versionCode \([0-9][0-9]*\).*/\1/p" "$GRADLE")
+VERSION=$(sed -n "s/.*versionName '\([^']*\)'.*/\1/p" "$GRADLE")
+TAG="$CODE-$VERSION"
+NOTES="$MP/CHANGELOG-$VERSION.md"
+
+if [ -z "$CODE" ] || [ -z "$VERSION" ]; then
+  echo "cannot read versionCode/versionName from $GRADLE"
+  exit 1
+fi
 
 if [ ! -f "$APK" ]; then
   echo "missing $APK - run ./build.sh first"
   exit 1
 fi
 
+if [ ! -f "$NOTES" ]; then
+  echo "missing $NOTES"
+  exit 1
+fi
+
 if ! "$GH" api "repos/$ORG_REPO" --jq .name >/dev/null 2>&1; then
   echo "Marketplace repo not ready yet: $ORG_REPO"
+  exit 1
+fi
+
+if [ "${1:-}" != "--metadata-only" ] && "$GH" release view "$TAG" --repo "$ORG_REPO" >/dev/null 2>&1; then
+  echo "release $TAG already exists in $ORG_REPO"
   exit 1
 fi
 
@@ -44,9 +64,11 @@ if [ "${1:-}" = "--metadata-only" ]; then
   exit 0
 fi
 
+echo "APK sha256 $(sha256sum "$APK" | cut -d' ' -f1)"
+
 "$GH" release create "$TAG" "$APK" \
   --repo "$ORG_REPO" \
   --title "$VERSION" \
-  --notes-file "$MP/CHANGELOG-$VERSION.md"
+  --notes-file "$NOTES"
 
-echo "Published to https://github.com/$ORG_REPO"
+echo "Published $TAG to https://github.com/$ORG_REPO"

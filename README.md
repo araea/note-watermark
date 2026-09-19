@@ -42,7 +42,7 @@ ColorOS 便签模块：决定分享长图底部留下什么，并把全部便签
 ./build.sh
 ```
 
-产物为 `build/NoteWatermark.apk`。模块按 `com.google.android.material:material:1.14.0` 与 `io.github.libxposed:api:102.0.0` 构建，libxposed 依赖只用于编译，不打进 APK。首次构建会在 `keystore/` 生成签名密钥，该目录不纳入 Git。更换密钥后，旧版本需先卸载才能安装新包。
+产物为 `build/NoteWatermark.apk`。模块按 `com.google.android.material:material:1.14.0` 与 `io.github.libxposed:api:102.0.0` 构建，libxposed 依赖只用于编译，不打进 APK。首次构建会在 `keystore/` 生成签名密钥，该目录不纳入 Git。更换密钥后，旧版本需先卸载才能安装新包。密钥与每版 APK 自行留存备份。
 
 真机测试包另外需要 R8：
 
@@ -52,6 +52,17 @@ bash tests/build.sh
 ```
 
 用同一签名安装后执行 `am instrument -w com.jy.notewatermark.test/.DesignSmoke`。测试不导出真实便签，结束后恢复原设置，并把浅色、深色、三种模式与大字号的界面截图写到应用私有目录。
+
+## 发布
+
+release 只发到模块市场。`marketplace/publish.sh` 从 `build.gradle` 读 `versionCode` 与 `versionName`，把元数据推到 `Xposed-Modules-Repo/com.jy.notewatermark`，再用 `版本号-版本名` 的 tag 建 release。源码仓库不再发布 release。
+
+```sh
+./build.sh
+./marketplace/publish.sh
+```
+
+`--metadata-only` 只推元数据，不建 release。
 
 ## 许可证
 
