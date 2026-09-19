@@ -4,6 +4,10 @@ ColorOS 便签模块：决定分享长图底部留下什么，并把全部便签
 
 按 ColorOS 16.0.10、便签 16.7.2 核验。
 
+## 下载
+
+模块只在[模块市场](https://modules.lsposed.org/module/com.jy.notewatermark/)发布。
+
 ## 运行条件
 
 - ColorOS 便签 `com.coloros.note`
@@ -11,7 +15,7 @@ ColorOS 便签模块：决定分享长图底部留下什么，并把全部便签
 
 ## 安装
 
-1. 安装市场发布的 `NoteWatermark.apk`
+1. 从[模块市场](https://modules.lsposed.org/module/com.jy.notewatermark/)安装 `NoteWatermark.apk`
 2. 在框架中启用模块。作用域由模块固定为 `com.coloros.note`，不需要手工添加
 3. 冷启动便签
 4. 打开「素笺」。页首会说明模块是否已经生效
