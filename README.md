@@ -1,74 +1,59 @@
 # 素笺
 
-ColorOS 便签模块：决定分享长图底部留下什么，并把全部便签导出为 ZIP。
+ColorOS 便签模块，可自定义分享长图底部水印，并将便签导出为 ZIP。
 
-按 ColorOS 16.0.10、便签 16.7.2 核验。分享页支持已知的 NearMe/ColorOS/OPlus 类路径；找不到时会尝试有限的 DEX 类名搜索。其他版本仍需实机验证。
-
-## 下载
-
-模块只在[模块市场](https://modules.lsposed.org/module/com.jy.notewatermark/)发布。
-
-## 运行条件
-
-- ColorOS 便签 `com.coloros.note`
-- 支持 libxposed API 102 的框架（LSPosed 2.x 起）
+已按 ColorOS 16.0.10、便签 16.7.2 核验。其他版本尚需实机验证。分享页只接管已识别的 NearMe、ColorOS 和 OPlus 路径；无法可靠识别时不会修改便签。
 
 ## 安装
 
-1. 从[模块市场](https://modules.lsposed.org/module/com.jy.notewatermark/)安装 `NoteWatermark.apk`
-2. 在框架中启用模块。作用域由模块固定为 `com.coloros.note`，不需要手工添加
-3. 冷启动便签
-4. 打开「素笺」。页首会说明模块是否已经生效，同时把设置同步给便签
+模块仅在[模块市场](https://modules.lsposed.org/module/com.jy.notewatermark/)发布。
 
-## 分享长图底部
+运行条件：
 
-三选一，选中即保存并同步给便签，重新打开便签的分享页后应用：
+- ColorOS 便签：`com.coloros.note`
+- 支持 libxposed API 102 的框架（LSPosed 2.x 或更新版本）
 
-- **不显示**：底部整行收起，长图到正文为止
-- **留白**：水印去掉，保留约两行高度的空白
-- **自定义**：保留分隔线，把水印换成自己写的一句话，最多 80 个字符
+从模块市场安装 `NoteWatermark.apk`，在框架中启用模块，再冷启动便签。作用域固定为便签应用，不需要手动添加。打开「素笺」确认模块已生效，并将设置同步给便签。
 
-页面上方的预览按同样的规则画出分享长图的底部。
+升级后需再次打开素笺，让便签读取设置。ColorOS 不允许便签主动启动素笺。
 
-设置由素笺交给便签保存。ColorOS 不允许便签反过来唤起素笺，所以升级模块后要打开一次素笺，便签才会拿到设置。切换模式时，写过的自定义文字会留着，下次选回「自定义」仍在。若新版便签移动了分享类，模块只会在识别到可靠的分享方法时接管水印；不会监听全部页面或改动普通便签内容。
+## 分享长图
 
-## 导出便签
+选择以下一种底部样式，重新打开便签分享页后生效：
 
-在同一页选择「导出全部便签」。ZIP 保存到系统「下载」目录，按便签分类写入文本、HTML 与附件。加密便签不导出，只在导出说明中计数。
+- **不显示**：隐藏底部区域。
+- **留白**：隐藏水印，保留约两行高度的空白。
+- **自定义**：保留分隔线并替换文字，最多 80 个字符。
 
-## 设计
+页面预览使用相同规则。切换样式不会清除已保存的自定义文字。
 
-设置页与图标使用同一套 [Material 3 Expressive 设计令牌和无障碍准则](artwork/DESIGN.md)；Apple HIG 只用于交互与平台体验核对，不混用视觉样式。
+## 导出
+
+在素笺中选择「导出全部便签」。ZIP 保存到系统「下载」目录，按分类导出文本、HTML 和附件。加密便签不会导出，只在结果中计数。
 
 ## 构建与测试
 
-需要 JDK 17 以上与 Android SDK（platform 35、build-tools 35.0.0），SDK 路径写进 `local.properties` 的 `sdk.dir`。Termux 下 `build.sh` 会改用系统 `aapt2`。
+需要 JDK 17 以上、Android SDK platform 35 和 build-tools 35.0.0。将 SDK 路径写入 `local.properties` 的 `sdk.dir`；Termux 下 `build.sh` 使用系统 `aapt2`。
 
 ```sh
 ./build.sh
 ```
 
-产物为 `build/NoteWatermark.apk`。模块按 `com.google.android.material:material:1.14.0` 与 `io.github.libxposed:api:102.0.0` 构建，libxposed 依赖只用于编译，不打进 APK。首次构建会在 `keystore/` 生成签名密钥，该目录不纳入 Git。更换密钥后，旧版本需先卸载才能安装新包。密钥与每版 APK 自行留存备份。
+APK 输出到 `build/NoteWatermark.apk`。首次构建会在 `keystore/` 生成签名密钥，该目录不入库。请备份密钥和每版 APK；更换密钥后需先卸载旧版。
 
-真机测试包另外需要 R8：
+真机设计测试还需下载 R8：
 
 ```sh
 curl -fsSL -o libs/r8.jar https://maven.google.com/com/android/tools/r8/8.9.35/r8-8.9.35.jar
 bash tests/build.sh
+am instrument -w com.jy.notewatermark.test/.DesignSmoke
 ```
 
-用同一签名安装后执行 `am instrument -w com.jy.notewatermark.test/.DesignSmoke`。测试不导出真实便签，结束后恢复原设置，并把浅色、深色、三种模式与大字号的界面截图写到应用私有目录。
+测试不导出真实便签；完成后恢复原设置。
 
-## 发布
+## 发布与设计
 
-release 只发到模块市场。`marketplace/publish.sh` 从 `build.gradle` 读 `versionCode` 与 `versionName`，把元数据推到 `Xposed-Modules-Repo/com.jy.notewatermark`，再用 `版本号-版本名` 的 tag 建 release。源码仓库不再发布 release。
-
-```sh
-./build.sh
-./marketplace/publish.sh
-```
-
-`--metadata-only` 只推元数据，不建 release。
+正式发布只通过[模块市场](https://modules.lsposed.org/module/com.jy.notewatermark/)。发布脚本位于 `marketplace/publish.sh`。界面规范见[设计系统](artwork/DESIGN.md)。
 
 ## 许可证
 
