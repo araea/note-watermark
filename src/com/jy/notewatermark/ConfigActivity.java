@@ -31,6 +31,8 @@ import com.google.android.material.shape.MaterialShapes;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import java.lang.ref.WeakReference;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * One screen for the one setting this module owns, plus the backup errand.
@@ -45,8 +47,12 @@ public final class ConfigActivity extends Activity {
     /** The three states {@link Main} can put the share footer in. */
     private static final int MODE_HIDDEN = 0, MODE_BLANK = 1, MODE_CUSTOM = 2;
 
-    private static final int STATUS_CHECKING = 0, STATUS_ACTIVE = 1,
-            STATUS_STALE = 2, STATUS_INACTIVE = 3, STATUS_MISSING = 4;
+    private static final int STATUS_CHECKING = 0, STATUS_ACTIVE = NotesBridge.ACTIVE,
+            STATUS_STALE = NotesBridge.STALE, STATUS_INACTIVE = NotesBridge.INACTIVE,
+            STATUS_MISSING = NotesBridge.MISSING;
+
+    /** One queue for every hand-off to Notes, so a later setting never lands before an earlier one. */
+    private static final ExecutorService BRIDGE = Executors.newSingleThreadExecutor();
 
     /** Long enough that typing is not saved letter by letter, short enough to feel immediate. */
     private static final long SAVE_DELAY_MS = 450L;
@@ -364,6 +370,21 @@ public final class ConfigActivity extends Activity {
                 .putInt(ConfigContract.KEY_SELECTED_MODE, mode);
         if (!watermark.isEmpty()) edit.putString(ConfigContract.KEY_LAST_CUSTOM_TEXT, watermark);
         edit.apply();
+        push();
+    }
+
+    /** Hands the saved settings to the Notes process; a changed answer updates the status quietly. */
+    private void push() {
+        final Context context = getApplicationContext();
+        BRIDGE.execute(() -> {
+            final int result = NotesBridge.sync(context);
+            main.post(() -> {
+                if (checking || isFinishing() || isDestroyed() || status == result) return;
+                status = result;
+                animate();
+                renderStatus();
+            });
+        });
     }
 
     /** Nothing off-screen needs to animate, and a transition cut short by a stop would
@@ -415,18 +436,18 @@ public final class ConfigActivity extends Activity {
     // ------------------------------------------------------------ module status
 
     /**
-     * Asks the injected code, inside the Notes process, to identify itself. A missing
-     * answer means the module is installed but not actually hooking anything.
+     * Asks the injected code, inside the Notes process, to identify itself, and hands it
+     * the settings on the way. A missing answer means the module is installed but not
+     * actually hooking anything.
      */
     private void checkModule() {
         if (checking) return;
         checking = true;
         status = STATUS_CHECKING;
         renderStatus();
-        final String expected = versionName();
         final Context context = getApplicationContext();
-        new Thread(() -> {
-            final int result = probe(context, expected);
+        BRIDGE.execute(() -> {
+            final int result = NotesBridge.sync(context);
             main.post(() -> {
                 checking = false;
                 if (isFinishing() || isDestroyed()) return;
@@ -434,24 +455,7 @@ public final class ConfigActivity extends Activity {
                 animate();
                 renderStatus();
             });
-        }, "note-watermark-status").start();
-    }
-
-    private static int probe(Context context, String expected) {
-        try {
-            context.getPackageManager().getPackageInfo(ConfigContract.NOTE_PKG, 0);
-        } catch (Exception missing) {
-            return STATUS_MISSING;
-        }
-        try (Cursor cursor = context.getContentResolver()
-                .query(ConfigContract.STATUS_URI, null, null, null, null)) {
-            if (cursor == null || !cursor.moveToFirst()) return STATUS_INACTIVE;
-            int column = cursor.getColumnIndex(ConfigContract.COLUMN_MODULE_VERSION);
-            if (column < 0 || cursor.isNull(column)) return STATUS_INACTIVE;
-            return expected.equals(cursor.getString(column)) ? STATUS_ACTIVE : STATUS_STALE;
-        } catch (Exception unhooked) {
-            return STATUS_INACTIVE;
-        }
+        });
     }
 
     // ------------------------------------------------------------------ export

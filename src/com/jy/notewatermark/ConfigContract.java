@@ -42,6 +42,24 @@ final class ConfigContract {
     static final Uri STATUS_URI =
             Uri.parse("content://" + NOTE_AUTHORITY + "/" + STATUS_SEGMENT);
 
+    /**
+     * The settings screen appends the current footer settings to the status probe. The
+     * hook keeps them inside the Notes process, because ColorOS refuses to start this
+     * module's process for the Notes app: without the copy, a share made while the
+     * module is not running could not read the settings at all. Hooks from before 4.1
+     * ignore the parameters and still answer the probe.
+     */
+    static final String PARAM_TEXT = "watermark_text";
+    static final String PARAM_KEEP_BLANK = "keep_blank_space";
+    static final int WATERMARK_MAX_LENGTH = 80;
+
+    static Uri statusUri(String text, boolean keepBlank) {
+        return STATUS_URI.buildUpon()
+                .appendQueryParameter(PARAM_TEXT, text)
+                .appendQueryParameter(PARAM_KEEP_BLANK, keepBlank ? "1" : "0")
+                .build();
+    }
+
     static final String COLUMN_MODULE_VERSION = "module_version";
     static final String[] STATUS_COLUMNS = { COLUMN_MODULE_VERSION };
 
@@ -55,6 +73,8 @@ final class ConfigContract {
     /** Where the hook remembers, inside the Notes app, what it already ran. */
     static final String NOTE_PREFS = "note_watermark";
     static final String KEY_EXPORT_HANDLED = "export_handled";
+    /** The copy of the footer settings kept inside the Notes process. */
+    static final String KEY_SYNCED = "settings_synced";
 
     private ConfigContract() {
     }

@@ -45,8 +45,11 @@ import io.github.libxposed.api.XposedModuleInterface;
  * hiding logo_ll keeps the watermark out of the exported picture as well as out
  * of the preview.
  *
- * Settings are edited in the module's launcher activity and read through a
- * read-only provider. The old watermark.txt files remain as a fallback.
+ * Settings are edited in the module's launcher activity, which hands them to this
+ * process over the bridge below; the copy lives in the Notes app's own preferences.
+ * ColorOS will not start the module's process on behalf of the Notes app, so its
+ * read-only provider is only a second source for installs that have not synced yet,
+ * and the old watermark.txt files the last.
  *
  * The same injection also carries the one-tap note export: the module UI cannot
  * read the Notes database, but code running inside the Notes process can, so the
@@ -160,6 +163,7 @@ public class Main extends XposedModule {
                     Uri uri = (Uri) chain.getArg(0);
                     String segment = uri == null ? null : uri.getLastPathSegment();
                     if (ConfigContract.STATUS_SEGMENT.equals(segment)) {
+                        receiveSettings(uri, ((ContentProvider) chain.getThisObject()).getContext());
                         return statusCursor();
                     }
                     if (!ConfigContract.EXPORT_SEGMENT.equals(segment)) {
@@ -184,6 +188,46 @@ public class Main extends XposedModule {
         MatrixCursor cursor = new MatrixCursor(ConfigContract.STATUS_COLUMNS);
         cursor.addRow(new Object[] { BuildConfig.VERSION_NAME });
         return cursor;
+    }
+
+    /** Keeps the settings the module sent along with a status probe, if the module sent them. */
+    private static void receiveSettings(Uri uri, Context context) {
+        String text = uri.getQueryParameter(ConfigContract.PARAM_TEXT);
+        String keepBlank = uri.getQueryParameter(ConfigContract.PARAM_KEEP_BLANK);
+        if (text == null || keepBlank == null || context == null) return;
+        if (!callerAllowed(context)) {
+            log("ignored settings from another app");
+            return;
+        }
+        storeSettings(context, new Config(clean(text), !"0".equals(keepBlank)));
+    }
+
+    private static void storeSettings(Context context, Config config) {
+        try {
+            settings(context).edit()
+                    .putBoolean(ConfigContract.KEY_SYNCED, true)
+                    .putString(ConfigContract.KEY_WATERMARK_TEXT, config.watermarkText)
+                    .putBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, config.keepBlankSpace)
+                    .commit();
+        } catch (Throwable t) {
+            log("could not keep the settings: " + t);
+        }
+    }
+
+    /**
+     * The share screen and the provider may run in different Notes processes, so the
+     * file is re-read whenever another process has changed it.
+     */
+    @SuppressWarnings("deprecation")
+    private static SharedPreferences settings(Context context) {
+        return context.getSharedPreferences(ConfigContract.NOTE_PREFS, Context.MODE_MULTI_PROCESS);
+    }
+
+    /** One line, at most the length the settings screen allows. */
+    private static String clean(String text) {
+        String line = text.replace('\n', ' ').replace('\r', ' ').trim();
+        return line.length() > ConfigContract.WATERMARK_MAX_LENGTH
+                ? line.substring(0, ConfigContract.WATERMARK_MAX_LENGTH).trim() : line;
     }
 
     private static MatrixCursor exportCursor(Context context) {
@@ -365,9 +409,20 @@ public class Main extends XposedModule {
 
     private static Config readConfig(Object activity) {
         if (activity instanceof Context) {
+            Context context = (Context) activity;
+            try {
+                SharedPreferences kept = settings(context);
+                if (kept.getBoolean(ConfigContract.KEY_SYNCED, false)) {
+                    return new Config(
+                            clean(kept.getString(ConfigContract.KEY_WATERMARK_TEXT, "")),
+                            kept.getBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, true));
+                }
+            } catch (Throwable t) {
+                log("could not read the kept settings: " + t);
+            }
             Cursor cursor = null;
             try {
-                cursor = ((Context) activity).getContentResolver().query(
+                cursor = context.getContentResolver().query(
                         ConfigContract.URI, null, null, null, null);
                 if (cursor != null && cursor.moveToFirst()) {
                     int textColumn = cursor.getColumnIndex(
@@ -376,8 +431,11 @@ public class Main extends XposedModule {
                             ConfigContract.COLUMN_KEEP_BLANK_SPACE);
                     String text = textColumn >= 0 ? cursor.getString(textColumn) : "";
                     boolean keepSpace = spaceColumn < 0 || cursor.getInt(spaceColumn) != 0;
-                    return new Config(text == null ? "" : text.trim(), keepSpace);
+                    Config config = new Config(text == null ? "" : clean(text), keepSpace);
+                    storeSettings(context, config);
+                    return config;
                 }
+                log("settings not synced yet and the module's provider answered nothing");
             } catch (Throwable t) {
                 log("could not read settings provider: " + t);
             } finally {

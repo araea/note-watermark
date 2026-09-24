@@ -50,6 +50,7 @@ public final class DesignSmoke extends Instrumentation {
         Bundle result = new Bundle();
         try {
             checkShareAdapt();
+            checkExportLinks();
             preferences = getTargetContext().getSharedPreferences("settings", 0);
             original = preferences.getAll();
             preferences.edit().remove("watermark_text").remove("keep_blank_space")
@@ -238,8 +239,8 @@ public final class DesignSmoke extends Instrumentation {
             });
             capture("large-text-320dp", STATUS_ACTIVE);
             close();
-            result.putString("stream", "\n" + report + "PASS: expressive settings UI\n");
             restore();
+            result.putString("stream", "\n" + report + "PASS: expressive settings UI\n");
             finish(Activity.RESULT_OK, result);
         } catch (Throwable error) {
             try { if (activity != null) close(); restore(); } catch (Throwable ignored) {}
@@ -269,6 +270,17 @@ public final class DesignSmoke extends Instrumentation {
             else if (value instanceof Float) edit.putFloat(entry.getKey(), (Float) value);
         }
         edit.commit();
+        // The screens under test handed their test settings to Notes; hand back the real ones.
+        try {
+            Class<?> bridge = Class.forName("com.jy.notewatermark.NotesBridge", true,
+                    getTargetContext().getClassLoader());
+            java.lang.reflect.Method sync = bridge.getDeclaredMethod("sync", android.content.Context.class);
+            sync.setAccessible(true);
+            report.append("  restored settings synced to Notes: ")
+                    .append(sync.invoke(null, getTargetContext())).append('\n');
+        } catch (Exception error) {
+            throw new RuntimeException(error);
+        }
     }
 
     /** Pins the module state so the review screenshots do not depend on what the phone answers. */
@@ -429,6 +441,27 @@ public final class DesignSmoke extends Instrumentation {
         catch (Exception failure) { throw new RuntimeException(failure); }
     }
     private void flush() { invoke(activity, "flush"); }
+
+    /** Exported pages must show their pictures from the archive, not from the Notes app. */
+    private void checkExportLinks() throws Exception {
+        Class<?> exporter = Class.forName("com.jy.notewatermark.NoteExporter", true,
+                getTargetContext().getClassLoader());
+        java.lang.reflect.Method id = exporter.getDeclaredMethod("attachmentId", String.class);
+        id.setAccessible(true);
+        check("2a57-cb8e".equals(id.invoke(null, "2a57-cb8e_thumb.png")), "thumbnail maps to its attachment id");
+        check("f3eb".equals(id.invoke(null, "f3eb.paint")), "a drawing maps to its attachment id");
+        java.lang.reflect.Method link = exporter.getDeclaredMethod("linkAttachments",
+                String.class, String.class, Map.class);
+        link.setAccessible(true);
+        Map<String, String> files = new java.util.HashMap<>();
+        files.put("2a57-cb8e", "2a57-cb8e_thumb.png");
+        String html = "<img src=\"2a57-cb8e\" width=\"1\"/><img src=\"gone\"><a src=\"2a57-cb8e\">";
+        String linked = (String) link.invoke(null, html, "001_今天 灵感_附件/", files);
+        check(linked.contains("src=\"001_%E4%BB%8A%E5%A4%A9%20%E7%81%B5%E6%84%9F_%E9%99%84%E4%BB%B6/2a57-cb8e_thumb.png\""),
+                "a picture points at its copy beside the page");
+        check(linked.contains("<img src=\"gone\">"), "an unknown picture is left as it was");
+        check(linked.endsWith("<a src=\"2a57-cb8e\">"), "only img sources are rewritten");
+    }
 
     /** Guard against accepting look-alike classes or modifying views outside the footer. */
     private void checkShareAdapt() throws Exception {

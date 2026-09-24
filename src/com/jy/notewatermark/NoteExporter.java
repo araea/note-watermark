@@ -25,6 +25,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -58,6 +60,9 @@ final class NoteExporter {
     private static final String DIR_UNKNOWN = "其他";
     private static final String UNTITLED = "无标题";
     private static final int TITLE_LIMIT = 30;
+
+    /** A picture in the note body names its attachment by id: {@code <img src="<id>" …>}. */
+    private static final Pattern IMAGE_SOURCE = Pattern.compile("(<img\\b[^>]*?\\bsrc=\")([^\"/:]+)(\")");
 
     static final class Result {
         final boolean ok;
@@ -251,13 +256,15 @@ final class NoteExporter {
                 int index = used == null ? 1 : used + 1;
                 counters.put(note.folder, index);
 
-                String base = sanitize(note.folder) + "/"
-                        + String.format(Locale.US, "%03d", index) + "_" + fileTitle(note);
+                String name = String.format(Locale.US, "%03d", index) + "_" + fileTitle(note);
+                String base = sanitize(note.folder) + "/" + name;
                 writeEntry(zip, base + ".txt", plainText(note).getBytes("UTF-8"));
+                Map<String, String> files = new HashMap<String, String>();
+                attachments += writeAttachments(context, zip, base + "_附件/", note, files);
                 if (note.html.trim().length() > 0) {
-                    writeEntry(zip, base + ".html", htmlDocument(note).getBytes("UTF-8"));
+                    String body = linkAttachments(note.html, name + "_附件/", files);
+                    writeEntry(zip, base + ".html", htmlDocument(note, body).getBytes("UTF-8"));
                 }
-                attachments += writeAttachments(context, zip, base + "_附件/", note);
             }
 
             writeEntry(zip, "导出说明.txt",
@@ -268,9 +275,13 @@ final class NoteExporter {
         }
     }
 
-    /** Copies whatever the Notes app kept for this note under files/&lt;note id&gt;/. */
+    /**
+     * Copies whatever the Notes app kept for this note under files/&lt;note id&gt;/, and
+     * records each file under the attachment id it belongs to (the file name up to
+     * "_thumb" or the extension), which is what the note body refers to.
+     */
     private static int writeAttachments(Context context, ZipOutputStream zip,
-            String prefix, Note note) throws Exception {
+            String prefix, Note note, Map<String, String> byId) throws Exception {
         File dir = new File(context.getFilesDir(), note.id);
         File[] files = dir.listFiles();
         if (files == null) {
@@ -284,7 +295,10 @@ final class NoteExporter {
             }
             InputStream in = new FileInputStream(file);
             try {
-                zip.putNextEntry(new ZipEntry(prefix + sanitize(file.getName())));
+                String entry = sanitize(file.getName());
+                zip.putNextEntry(new ZipEntry(prefix + entry));
+                String id = attachmentId(file.getName());
+                if (!byId.containsKey(id)) byId.put(id, entry);
                 int read;
                 while ((read = in.read(buffer)) > 0) {
                     zip.write(buffer, 0, read);
@@ -296,6 +310,27 @@ final class NoteExporter {
             }
         }
         return count;
+    }
+
+    private static String attachmentId(String fileName) {
+        int end = fileName.indexOf("_thumb");
+        if (end < 0) end = fileName.lastIndexOf('.');
+        return end > 0 ? fileName.substring(0, end) : fileName;
+    }
+
+    /** Points each picture at its copy next to the page, so the page opens with its images. */
+    private static String linkAttachments(String html, String folder, Map<String, String> files) {
+        if (files.isEmpty()) return html;
+        Matcher matcher = IMAGE_SOURCE.matcher(html);
+        StringBuffer out = new StringBuffer(html.length() + 64);
+        while (matcher.find()) {
+            String entry = files.get(matcher.group(2));
+            String source = entry == null ? matcher.group(2) : Uri.encode(folder + entry, "/");
+            matcher.appendReplacement(out, Matcher.quoteReplacement(
+                    matcher.group(1) + source + matcher.group(3)));
+        }
+        matcher.appendTail(out);
+        return out.toString();
     }
 
     private static void writeEntry(ZipOutputStream zip, String name, byte[] body)
@@ -317,14 +352,14 @@ final class NoteExporter {
         return sb.toString();
     }
 
-    private static String htmlDocument(Note note) {
+    private static String htmlDocument(Note note, String body) {
         return "<!DOCTYPE html>\n<html lang=\"zh\">\n<head>\n<meta charset=\"utf-8\">\n"
                 + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
                 + "<title>" + escape(displayTitle(note)) + "</title>\n"
                 + "<style>body{margin:24px auto;max-width:44em;padding:0 16px;"
                 + "font:16px/1.7 system-ui,sans-serif}img{max-width:100%}"
                 + ".h1{font-size:1.5em;font-weight:700}</style>\n</head>\n<body>\n"
-                + note.html + "\n</body>\n</html>\n";
+                + body + "\n</body>\n</html>\n";
     }
 
     private static String readme(int total, int skipped, int attachments,
