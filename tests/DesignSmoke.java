@@ -49,6 +49,7 @@ public final class DesignSmoke extends Instrumentation {
     @Override public void onStart() {
         Bundle result = new Bundle();
         try {
+            checkShareAdapt();
             preferences = getTargetContext().getSharedPreferences("settings", 0);
             original = preferences.getAll();
             preferences.edit().remove("watermark_text").remove("keep_blank_space")
@@ -405,6 +406,42 @@ public final class DesignSmoke extends Instrumentation {
         catch (Exception failure) { throw new RuntimeException(failure); }
     }
     private void flush() { invoke(activity, "flush"); }
+
+    /** Guard against accepting look-alike classes or modifying views outside the footer. */
+    private void checkShareAdapt() throws Exception {
+        Class<?> adapt = Class.forName("com.jy.notewatermark.ShareAdapt", true,
+                getTargetContext().getClassLoader());
+        java.lang.reflect.Method inspect = adapt.getDeclaredMethod("inspect", Class.class);
+        inspect.setAccessible(true);
+        Object target = inspect.invoke(null, ShareFixture.class);
+        check(target != null, "share method signatures are recognized");
+        java.lang.reflect.Field logo = target.getClass().getDeclaredField("logo");
+        logo.setAccessible(true);
+        check(logo.get(target) != null, "logo hook is independently available");
+        check(inspect.invoke(null, UnrelatedFixture.class) == null,
+                "unrelated methods are not hooked by a fuzzy name match");
+        java.lang.reflect.Method resolve = adapt.getDeclaredMethod("resolve", Object.class);
+        resolve.setAccessible(true);
+        ShareFixture fixture = new ShareFixture();
+        fixture.mLogoLinearLayout = new LinearLayout(getTargetContext());
+        fixture.mWaterMark = new TextView(getTargetContext());
+        Object views = resolve.invoke(null, fixture);
+        java.lang.reflect.Field row = views.getClass().getDeclaredField("row");
+        row.setAccessible(true);
+        check(row.get(views) == fixture.mLogoLinearLayout,
+                "reflection still resolves the verified share footer");
+    }
+
+    public static final class ShareFixture {
+        public View mLogoLinearLayout;
+        public View mWaterMark;
+        public void setLogo() { }
+        public void createImageFile(int width, int height, int quality) { }
+    }
+
+    public static final class UnrelatedFixture {
+        public void saveImage(String path) { }
+    }
 
     private void check(boolean condition, String message) {
         if (!condition) throw new AssertionError(message);

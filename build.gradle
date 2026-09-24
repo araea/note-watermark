@@ -7,8 +7,8 @@ android {
         applicationId 'com.jy.notewatermark'
         minSdk 26
         targetSdk 34
-        versionCode 14
-        versionName '3.3.2'
+        versionCode 15
+        versionName '3.4.0'
     }
     sourceSets {
         main {

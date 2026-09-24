@@ -18,7 +18,6 @@ import android.widget.Toast;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.ByteArrayOutputStream;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 import io.github.libxposed.api.XposedInterface;
@@ -62,7 +61,6 @@ public class Main extends XposedModule {
 
     private static final String TAG = "NoteWatermark";
     private static final String TARGET_PKG = "com.coloros.note";
-    private static final String TARGET_CLASS = "com.nearme.note.activity.edit.SaveImageAndShare";
     /** Exported, permission-free provider of the Notes app; see AndroidManifest. */
     private static final String BACKUP_PROVIDER =
             "com.oplus.migrate.backuprestore.NoteBackupRestoreProvider";
@@ -95,23 +93,23 @@ public class Main extends XposedModule {
     }
 
     private void installHooks(ClassLoader classLoader) {
-        Class<?> target;
-        try {
-            target = classLoader.loadClass(TARGET_CLASS);
-        } catch (Throwable t) {
-            log("could not load " + TARGET_CLASS + ": " + t);
-            return;
-        }
-        hookSetLogo(target);
-        hookCreateImageFile(target);
+        // The export/status bridge must work even if a newer Notes build moves the
+        // share screen and no watermark hooks can be installed.
         hookModuleBridge(classLoader);
         hookPendingExport();
+        ShareAdapt.Target target = ShareAdapt.discover(classLoader);
+        if (target == null) {
+            log("share screen not found; export and status remain available");
+            return;
+        }
+        log("share screen: " + target.type.getName());
+        if (target.logo != null) hookSetLogo(target.logo);
+        if (target.image != null) hookCreateImageFile(target.image);
     }
 
     /** Primary hook: right after the app has filled in the logo/watermark views. */
-    private void hookSetLogo(Class<?> target) {
+    private void hookSetLogo(Method setLogo) {
         try {
-            Method setLogo = target.getDeclaredMethod("setLogo");
             hook(setLogo).setId("setLogo").intercept(new XposedInterface.Hooker() {
                 @Override
                 public Object intercept(XposedInterface.Chain chain) throws Throwable {
@@ -120,7 +118,7 @@ public class Main extends XposedModule {
                     return result;
                 }
             });
-            log("hooked " + TARGET_CLASS + ".setLogo()");
+            log("hooked " + setLogo);
         } catch (Throwable t) {
             log("could not hook setLogo(): " + t);
         }
@@ -128,10 +126,8 @@ public class Main extends XposedModule {
 
     /** Safety net: run again just before the bitmap is drawn, in case the app
      * re-shows the views after setLogo() (e.g. on a skin change). */
-    private void hookCreateImageFile(Class<?> target) {
+    private void hookCreateImageFile(Method createImageFile) {
         try {
-            Method createImageFile =
-                    target.getDeclaredMethod("createImageFile", int.class, int.class, int.class);
             hook(createImageFile).setId("createImageFile").intercept(new XposedInterface.Hooker() {
                 @Override
                 public Object intercept(XposedInterface.Chain chain) throws Throwable {
@@ -139,7 +135,7 @@ public class Main extends XposedModule {
                     return chain.proceed();
                 }
             });
-            log("hooked " + TARGET_CLASS + ".createImageFile(int,int,int)");
+            log("hooked " + createImageFile);
         } catch (Throwable t) {
             log("could not hook createImageFile(): " + t);
         }
@@ -323,11 +319,14 @@ public class Main extends XposedModule {
         Config config = readConfig(activity);
         String custom = config.watermarkText;
 
-        Object logoLl = field(activity, "mLogoLinearLayout");
-        Object line = field(activity, "mLine");
-        Object waterMark = field(activity, "mWaterMark");
-        Object shareLogo = field(activity, "mShareLogo");
-        Object shareLogoOriginal = field(activity, "mShareLogoOriginal");
+        ShareAdapt.Views views = ShareAdapt.resolve(activity);
+        Object logoLl = views.row;
+        Object line = views.line;
+        Object waterMark = views.watermark;
+        Object shareLogo = views.share;
+        Object shareLogoOriginal = views.original;
+        if (logoLl == null && waterMark == null && shareLogo == null
+                && shareLogoOriginal == null) return;
 
         if (custom.length() == 0 && !config.keepBlankSpace) {
             // Hide the whole row: the divider line and both text views live inside it,
@@ -435,25 +434,6 @@ public class Main extends XposedModule {
             this.watermarkText = watermarkText;
             this.keepBlankSpace = keepBlankSpace;
         }
-    }
-
-    /** Reads a field the way XposedHelpers.getObjectField did: up the hierarchy. */
-    private static Object field(Object obj, String name) {
-        if (obj == null) {
-            return null;
-        }
-        for (Class<?> c = obj.getClass(); c != null; c = c.getSuperclass()) {
-            try {
-                Field f = c.getDeclaredField(name);
-                f.setAccessible(true);
-                return f.get(obj);
-            } catch (NoSuchFieldException e) {
-                // keep walking up
-            } catch (Throwable t) {
-                return null;
-            }
-        }
-        return null;
     }
 
     private static void setVisibility(Object view, int visibility) {
