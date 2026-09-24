@@ -14,19 +14,20 @@
     <string name="status_inactive_detail">在框架中启用「素笺」，再冷启动 ColorOS 便签。作用域已固定，无需手动添加。</string>
     <string name="status_missing">未找到 ColorOS 便签</string>
     <string name="status_missing_detail">本模块只作用于 ColorOS 自带的便签应用。</string>
-    <string name="status_recheck">点按重新检查</string>
+    <string name="status_active_detail">便签中运行的是 %1$s 版</string>
+    <string name="status_checking_detail">正在询问 ColorOS 便签</string>
+    <string name="status_recheck">点按可重新检查</string>
 
     <!-- The one thing this module changes. -->
     <string name="share_section">分享长图底部</string>
     <string name="preview_label">效果预览</string>
-    <string name="mode_group_label">水印显示方式</string>
     <string name="mode_hidden">不显示</string>
     <string name="mode_blank">留白</string>
     <string name="mode_custom">自定义</string>
-    <string name="mode_hidden_detail">底部整行收起，长图到正文为止。</string>
-    <string name="mode_blank_detail">水印去掉，留下约两行高度的空白。</string>
-    <string name="mode_custom_detail">保留分隔线，把水印换成你写的一句话。</string>
-    <string name="mode_custom_empty">还没有写水印文字，此时与「留白」相同。</string>
+    <string name="mode_hidden_detail">底部整行收起，长图到正文为止</string>
+    <string name="mode_blank_detail">去掉水印，留下约两行高的空白</string>
+    <string name="mode_custom_detail">保留分隔线，换成你写的一句话</string>
+    <string name="mode_custom_empty">留空时与「留白」相同</string>
     <string name="watermark_hint">水印文字</string>
     <string name="preview_sample_title">今天的灵感</string>
     <string name="preview_sample_body">一些想法，一点日常。每一次记录，都保留本来的样子。</string>
@@ -36,7 +37,8 @@
 
     <!-- Backup -->
     <string name="export_section">导出便签</string>
-    <string name="export_body">把全部便签按分类整理成 ZIP，保存到系统「下载」文件夹，包含文本、HTML 与附件。</string>
+    <string name="export_title">整理为 ZIP</string>
+    <string name="export_body">按分类保存到系统「下载」文件夹，包含文本、HTML 与附件</string>
     <string name="export_privacy">加密便签会自动跳过</string>
     <string name="export_action">导出全部便签</string>
     <string name="export_running">正在导出…</string>

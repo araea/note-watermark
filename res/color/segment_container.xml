@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The chosen segment carries the screen's only primary fill. -->
+<!--
+    MDC's segmented container with the item lifted to surfaceBright, so the list reads
+    as raised on the surfaceContainer page in both light and dark. The selected item
+    keeps the list token (secondaryContainer).
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:color="?attr/colorPrimary" android:state_enabled="true" android:state_checked="true" />
-    <item android:color="@android:color/transparent" />
+    <item android:color="?attr/colorSecondaryContainer" android:state_checkable="true" android:state_checked="true" />
+    <item android:color="?attr/colorSurfaceBright" />
 </selector>

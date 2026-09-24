@@ -11,8 +11,10 @@ import android.os.Looper;
 import android.text.Editable;
 import android.text.InputFilter;
 import android.text.TextWatcher;
+import android.content.res.ColorStateList;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.ImageView;
@@ -20,10 +22,12 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.core.widget.NestedScrollView;
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.color.DynamicColors;
-import com.google.android.material.progressindicator.CircularProgressIndicator;
+import com.google.android.material.listitem.ListItemCardView;
+import com.google.android.material.listitem.ListItemLayout;
+import com.google.android.material.loadingindicator.LoadingIndicator;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
+import com.google.android.material.shape.MaterialShapes;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import java.lang.ref.WeakReference;
@@ -32,9 +36,10 @@ import java.lang.ref.WeakReference;
  * One screen for the one setting this module owns, plus the backup errand.
  *
  * The share preview is the subject: it shows the footer of the picture the Notes
- * app is about to produce, and the segmented control right under it names the three
- * outcomes the hook can actually produce. Choices apply as they are made, so there
- * is no draft state, no save bar and no "are you sure" on the way out.
+ * app is about to produce, and the radio list right under it names the three
+ * outcomes the hook can actually produce, each with what it does. Choices apply as
+ * they are made, so there is no draft state, no save bar and no "are you sure" on
+ * the way out.
  */
 public final class ConfigActivity extends Activity {
     /** The three states {@link Main} can put the share footer in. */
@@ -50,14 +55,14 @@ public final class ConfigActivity extends Activity {
     private SharedPreferences prefs;
 
     private NestedScrollView scroll;
-    private LinearLayout content, statusRow, statusText, previewSheet, previewFooter;
-    private CircularProgressIndicator statusSpinner;
-    private ImageView statusIcon, exportPrivacyIcon;
+    private LinearLayout content, shareGroup, statusText, previewSheet, previewFooter;
+    private ListItemCardView statusCard, previewCard;
+    private ChoiceItem[] modeItems;
+    private LoadingIndicator statusLoading;
+    private ImageView statusIcon, statusAction, exportPrivacyIcon;
     private TextView statusTitle, statusDetail, previewLabel, sampleTitle, sampleBody, previewWatermark,
-            modeDetail, exportStatus, exportPrivacy, versionLabel;
-    private View previewDivider;
-    private MaterialButtonToggleGroup modeGroup;
-    private MaterialButton[] modeButtons;
+            exportStatus, exportPrivacy, versionLabel;
+    private View previewDivider, inputItem;
     private TextInputLayout inputLayout;
     private TextInputEditText watermarkInput;
     private MaterialButton exportButton;
@@ -102,18 +107,10 @@ public final class ConfigActivity extends Activity {
                 : !saved.isEmpty() ? saved : mode == MODE_CUSTOM ? "" : lastCustom);
         watermarkInput.setSelection(watermarkInput.length());
 
-        modeGroup.check(modeButtons[mode].getId());
-        modeGroup.addOnButtonCheckedListener((group, id, checked) -> {
-            if (!checked) return;
-            for (int i = 0; i < modeButtons.length; i++) {
-                if (modeButtons[i].getId() == id && mode != i) {
-                    mode = i;
-                    animate();
-                    render();
-                    save();
-                }
-            }
-        });
+        for (int i = 0; i < modeItems.length; i++) {
+            final int choice = i;
+            modeItems[i].setOnClickListener(v -> choose(choice));
+        }
         watermarkInput.addTextChangedListener(new TextWatcher() {
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             public void onTextChanged(CharSequence s, int start, int before, int count) {
@@ -128,12 +125,13 @@ public final class ConfigActivity extends Activity {
             hideKeyboard();
             return true;
         });
-        statusRow.setOnClickListener(v -> checkModule());
+        statusCard.setOnClickListener(v -> checkModule());
         exportButton.setOnClickListener(v -> startExport());
 
         render();
         renderExport();
         renderStatus();
+        segments(shareGroup);
         checkModule();
         if (state != null) scroll.post(() -> scroll.scrollTo(0, state.getInt("scroll")));
     }
@@ -141,12 +139,15 @@ public final class ConfigActivity extends Activity {
     private void bind() {
         scroll = findViewById(R.id.scroll);
         content = findViewById(R.id.content);
-        statusRow = findViewById(R.id.statusRow);
+        statusCard = findViewById(R.id.statusCard);
         statusText = findViewById(R.id.statusText);
-        statusSpinner = findViewById(R.id.statusSpinner);
+        statusLoading = findViewById(R.id.statusLoading);
         statusIcon = findViewById(R.id.statusIcon);
+        statusAction = findViewById(R.id.statusAction);
         statusTitle = findViewById(R.id.statusTitle);
         statusDetail = findViewById(R.id.statusDetail);
+        shareGroup = findViewById(R.id.shareGroup);
+        previewCard = findViewById(R.id.previewCard);
         previewSheet = findViewById(R.id.previewSheet);
         previewFooter = findViewById(R.id.previewFooter);
         previewDivider = findViewById(R.id.previewDivider);
@@ -154,11 +155,10 @@ public final class ConfigActivity extends Activity {
         previewLabel = findViewById(R.id.previewLabel);
         sampleTitle = findViewById(R.id.sampleTitle);
         sampleBody = findViewById(R.id.sampleBody);
-        modeGroup = findViewById(R.id.modeGroup);
-        modeButtons = new MaterialButton[] {
+        modeItems = new ChoiceItem[] {
             findViewById(R.id.modeHidden), findViewById(R.id.modeBlank), findViewById(R.id.modeCustom),
         };
-        modeDetail = findViewById(R.id.modeDetail);
+        inputItem = findViewById(R.id.inputItem);
         inputLayout = findViewById(R.id.inputLayout);
         watermarkInput = findViewById(R.id.watermarkInput);
         exportButton = findViewById(R.id.exportButton);
@@ -169,23 +169,51 @@ public final class ConfigActivity extends Activity {
         versionLabel = findViewById(R.id.versionLabel);
     }
 
-    /** Everything a token cannot express in XML: tinted shapes, limits, measured layout. */
+    /** Everything a token cannot express in XML: tinted shapes, limits, accessibility roles. */
     private void paint() {
-        previewSheet.setBackground(ui.shape(ui.sheet, R.style.Shape_Sujian_Sheet));
+        previewSheet.setBackground(ui.shape(ui.paper, R.style.Shape_Sujian_Paper));
         previewDivider.setBackgroundColor(ui.outline);
-        exportPrivacy.setTextColor(ui.muted);
-        exportPrivacyIcon.setImageTintList(android.content.res.ColorStateList.valueOf(ui.muted));
+        exportPrivacyIcon.setImageTintList(ColorStateList.valueOf(ui.muted));
         watermarkInput.setFilters(new InputFilter[] { new InputFilter.LengthFilter(80) });
         versionLabel.setText(getString(R.string.version_footer, versionName()));
         heading(findViewById(R.id.shareSection));
         heading(findViewById(R.id.exportSection));
-        for (View child : new View[] { previewLabel, sampleTitle, sampleBody, previewFooter }) {
-            child.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
-        }
-        previewSheet.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
-        exportStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        statusRow.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        ((ListItemLayout) findViewById(R.id.statusItem)).updateAppearance(0, 1);
+        ((ListItemLayout) findViewById(R.id.exportItem)).updateAppearance(0, 1);
+
+        // The preview is one summary node; its sample text is not read out line by line.
+        previewCard.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        previewCard.setFocusable(true);
+        ((View) previewLabel.getParent()).setImportantForAccessibility(
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         statusText.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        statusCard.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        exportStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        findViewById(R.id.exportPrivacyRow).setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+
+        // The three cards are one single-choice list: each announces its position, the way
+        // a RadioGroup would (the radio role itself comes from ChoiceItem).
+        shareGroup.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+            @Override public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
+                super.onInitializeAccessibilityNodeInfo(host, info);
+                info.setCollectionInfo(AccessibilityNodeInfo.CollectionInfo.obtain(modeItems.length, 1, false,
+                        AccessibilityNodeInfo.CollectionInfo.SELECTION_MODE_SINGLE));
+            }
+        });
+        for (int i = 0; i < modeItems.length; i++) {
+            final int row = i;
+            ChoiceItem item = modeItems[i];
+            item.setCheckable(true);
+            item.setClickable(true);
+            item.setFocusable(true);
+            item.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+                @Override public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
+                    super.onInitializeAccessibilityNodeInfo(host, info);
+                    info.setCollectionItemInfo(AccessibilityNodeInfo.CollectionItemInfo.obtain(
+                            row, 1, 0, 1, false, mode == row));
+                }
+            });
+        }
         content.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             int width = Math.min(((ViewGroup) content.getParent()).getWidth(),
                     ui.dimen(R.dimen.content_max_width));
@@ -193,30 +221,29 @@ public final class ConfigActivity extends Activity {
                 content.getLayoutParams().width = width;
                 content.requestLayout();
             }
-            stackModesIfCramped(r - l - content.getPaddingLeft() - content.getPaddingRight());
         });
     }
 
-    /**
-     * Three segments side by side stop being readable long before the text is
-     * ellipsised, so at large font sizes or on narrow screens they stack instead.
-     */
-    private void stackModesIfCramped(int available) {
-        if (available <= 0) return;
-        float widest = 0;
-        for (MaterialButton button : modeButtons) {
-            widest = Math.max(widest, button.getPaint().measureText(button.getText().toString()));
+    /** Gives each visible item of a segmented list its first / middle / last shape. */
+    private static void segments(LinearLayout group) {
+        int count = 0;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            if (group.getChildAt(i).getVisibility() != View.GONE) count++;
         }
-        boolean stack = (widest + ui.dimen(R.dimen.segment_padding)) * modeButtons.length > available;
-        int orientation = stack ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL;
-        if (modeGroup.getOrientation() == orientation) return;
-        modeGroup.setOrientation(orientation);
-        for (MaterialButton button : modeButtons) {
-            LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) button.getLayoutParams();
-            params.width = stack ? LinearLayout.LayoutParams.MATCH_PARENT : 0;
-            params.weight = stack ? 0 : 1;
-            button.setLayoutParams(params);
+        int position = 0;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child.getVisibility() == View.GONE) continue;
+            ((ListItemLayout) child).updateAppearance(position++, count);
         }
+    }
+
+    private void choose(int choice) {
+        if (mode == choice) return;
+        mode = choice;
+        animate();
+        render();
+        save();
     }
 
     private String versionName() {
@@ -237,14 +264,18 @@ public final class ConfigActivity extends Activity {
         previewWatermark.setVisibility(written ? View.VISIBLE : View.INVISIBLE);
         previewWatermark.setText(written ? draft() : getString(R.string.preview_sample_watermark));
 
-        modeDetail.setText(mode == MODE_HIDDEN ? getString(R.string.mode_hidden_detail)
-                : mode == MODE_BLANK ? getString(R.string.mode_blank_detail)
-                : written ? getString(R.string.mode_custom_detail)
-                : getString(R.string.mode_custom_empty));
-        inputLayout.setVisibility(custom ? View.VISIBLE : View.GONE);
+        for (int i = 0; i < modeItems.length; i++) modeItems[i].setChecked(mode == i);
+        if ((inputItem.getVisibility() == View.VISIBLE) != custom) {
+            inputItem.setVisibility(custom ? View.VISIBLE : View.GONE);
+            segments(shareGroup);
+        }
         // An empty custom line is a supported blank footer, not a validation error.
-        previewSheet.setContentDescription(getString(R.string.share_section) + "：" + modeDetail.getText()
-                + (written ? draft() : ""));
+        inputLayout.setHelperText(written ? null : getString(R.string.mode_custom_empty));
+        String outcome = mode == MODE_HIDDEN ? getString(R.string.mode_hidden_detail)
+                : mode == MODE_BLANK || !written ? getString(R.string.mode_blank_detail)
+                : getString(R.string.mode_custom_detail) + "：" + draft();
+        previewCard.setContentDescription(getString(R.string.preview_label) + "，"
+                + getString(R.string.share_section) + "：" + outcome);
     }
 
     /**
@@ -253,40 +284,47 @@ public final class ConfigActivity extends Activity {
      * surface and a second line saying what to do about it.
      */
     private void renderStatus() {
-        boolean quiet = status == STATUS_ACTIVE || status == STATUS_CHECKING;
-        int foreground = status == STATUS_CHECKING || status == STATUS_ACTIVE ? ui.muted
-                : status == STATUS_STALE ? ui.onSecondaryContainer : ui.onErrorContainer;
-        statusRow.setBackground(quiet ? null : ui.shape(
-                status == STATUS_STALE ? ui.secondaryContainer : ui.errorContainer,
-                R.style.Shape_Sujian_Medium));
-        int inset = quiet ? 0 : ui.lg;
-        statusRow.setPadding(inset, quiet ? 0 : ui.md, inset, quiet ? 0 : ui.md);
+        boolean checkingNow = status == STATUS_CHECKING;
+        boolean quiet = checkingNow || status == STATUS_ACTIVE;
+        boolean stale = status == STATUS_STALE;
+        int surface = quiet ? ui.card : stale ? ui.tertiaryContainer : ui.errorContainer;
+        int onSurface = quiet ? ui.ink : stale ? ui.onTertiaryContainer : ui.onErrorContainer;
+        int onSurfaceVariant = quiet ? ui.muted : onSurface;
+        statusCard.setCardBackgroundColor(surface);
+        statusTitle.setTextColor(onSurface);
+        statusDetail.setTextColor(onSurfaceVariant);
+        statusAction.setImageTintList(ColorStateList.valueOf(onSurfaceVariant));
 
-        statusSpinner.setVisibility(status == STATUS_CHECKING ? View.VISIBLE : View.GONE);
-        statusIcon.setVisibility(status == STATUS_CHECKING ? View.GONE : View.VISIBLE);
-        statusIcon.setImageResource(status == STATUS_ACTIVE
-                ? R.drawable.ic_status_active : R.drawable.ic_status_alert);
-        statusIcon.setImageTintList(android.content.res.ColorStateList.valueOf(foreground));
-
-        statusTitle.setText(status == STATUS_CHECKING ? R.string.status_checking
-                : status == STATUS_ACTIVE ? R.string.status_active
-                : status == STATUS_STALE ? R.string.status_stale
-                : status == STATUS_MISSING ? R.string.status_missing : R.string.status_inactive);
-        statusTitle.setTextColor(foreground);
-        statusDetail.setTextColor(foreground);
-        statusDetail.setVisibility(quiet ? View.GONE : View.VISIBLE);
-        if (!quiet) {
-            statusDetail.setText(status == STATUS_STALE ? R.string.status_stale_detail
-                    : status == STATUS_MISSING ? R.string.status_missing_detail
-                    : R.string.status_inactive_detail);
+        statusLoading.setVisibility(checkingNow ? View.VISIBLE : View.GONE);
+        statusIcon.setVisibility(checkingNow ? View.GONE : View.VISIBLE);
+        statusAction.setVisibility(checkingNow ? View.INVISIBLE : View.VISIBLE);
+        if (!checkingNow) {
+            boolean active = status == STATUS_ACTIVE;
+            statusIcon.setBackground(ui.badge(active ? MaterialShapes.COOKIE_9 : MaterialShapes.SUNNY,
+                    active ? ui.primaryContainer : stale ? ui.tertiary : ui.error));
+            statusIcon.setImageResource(active ? R.drawable.ic_status_active
+                    : stale ? R.drawable.ic_refresh : R.drawable.ic_status_alert);
+            statusIcon.setImageTintList(ColorStateList.valueOf(
+                    active ? ui.onPrimaryContainer : stale ? ui.onTertiary : ui.onError));
         }
-        statusRow.setContentDescription(statusTitle.getText()
-                + (quiet ? "" : "。" + statusDetail.getText())
-                + "。" + getString(R.string.status_recheck));
+
+        statusTitle.setText(checkingNow ? R.string.status_checking
+                : status == STATUS_ACTIVE ? R.string.status_active
+                : stale ? R.string.status_stale
+                : status == STATUS_MISSING ? R.string.status_missing : R.string.status_inactive);
+        statusDetail.setText(checkingNow ? getString(R.string.status_checking_detail)
+                : status == STATUS_ACTIVE ? getString(R.string.status_active_detail, versionName())
+                : getString(stale ? R.string.status_stale_detail
+                        : status == STATUS_MISSING ? R.string.status_missing_detail
+                        : R.string.status_inactive_detail));
+        statusCard.setEnabled(!checkingNow);
+        statusCard.setContentDescription(statusTitle.getText() + "。" + statusDetail.getText()
+                + (checkingNow ? "" : "。" + getString(R.string.status_recheck)));
     }
 
     private void renderExport() {
         exportButton.setEnabled(!exportJob.running);
+        exportButton.setIconResource(exportJob.failed ? R.drawable.ic_refresh : R.drawable.ic_export);
         exportButton.setText(exportJob.running ? R.string.export_running
                 : exportJob.failed ? R.string.export_retry : R.string.export_action);
         exportProgress.setVisibility(exportJob.running ? View.VISIBLE : View.GONE);
@@ -294,8 +332,8 @@ public final class ConfigActivity extends Activity {
         exportStatus.setText(exportJob.message);
         exportStatus.setTextColor(exportJob.failed ? ui.onErrorContainer : ui.muted);
         exportStatus.setBackground(exportJob.failed
-                ? ui.shape(ui.errorContainer, R.style.Shape_Sujian_Small) : null);
-        int padding = exportJob.failed ? ui.md : 0;
+                ? ui.shape(ui.errorContainer, R.style.Shape_Sujian_Notice) : null);
+        int padding = exportJob.failed ? ui.dimen(R.dimen.space_md) : 0;
         exportStatus.setPadding(padding, padding, padding, padding);
     }
 

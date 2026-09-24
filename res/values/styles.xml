@@ -15,6 +15,8 @@
         <item name="colorSurface">@color/surface</item>
         <item name="colorOnSurface">@color/on_surface</item>
         <item name="colorOnSurfaceVariant">@color/on_surface_variant</item>
+        <item name="colorSurfaceBright">@color/surface_bright</item>
+        <item name="colorSurfaceDim">@color/surface_dim</item>
         <item name="colorSurfaceContainerLowest">@color/surface_container_lowest</item>
         <item name="colorSurfaceContainerLow">@color/surface_container_low</item>
         <item name="colorSurfaceContainer">@color/surface_container</item>
@@ -26,37 +28,29 @@
         <item name="colorOnError">@color/on_error</item>
         <item name="colorErrorContainer">@color/error_container</item>
         <item name="colorOnErrorContainer">@color/on_error_container</item>
-        <item name="android:windowBackground">?attr/colorSurface</item>
-        <item name="android:colorBackground">?attr/colorSurface</item>
-        <item name="android:fontFamily">sans</item>
-        <item name="shapeAppearanceSmallComponent">@style/Shape.Sujian.Small</item>
-        <item name="shapeAppearanceMediumComponent">@style/Shape.Sujian.Medium</item>
-        <item name="shapeAppearanceLargeComponent">@style/Shape.Sujian.Large</item>
+        <item name="android:windowBackground">?attr/colorSurfaceContainer</item>
+        <item name="android:colorBackground">?attr/colorSurfaceContainer</item>
     </style>
 
-    <!-- Component shapes use the same rounded family as the launcher page. -->
-    <style name="Shape.Sujian.Small" parent="ShapeAppearance.Material3.Corner.Small"><item name="cornerSize">12dp</item></style>
-    <style name="Shape.Sujian.Medium" parent="ShapeAppearance.Material3.Corner.Medium"><item name="cornerSize">20dp</item></style>
-    <style name="Shape.Sujian.Large" parent="ShapeAppearance.Material3.Corner.Large"><item name="cornerSize">28dp</item></style>
-    <style name="Shape.Sujian.Pill" parent="ShapeAppearance.Material3.Corner.Full" />
-    <style name="Shape.Sujian.Sheet" parent="ShapeAppearance.Material3.Corner.ExtraLarge">
-        <item name="cornerSize">28dp</item>
-    </style>
+    <!--
+        Shapes come from the M3 corner scale only. List items take their first / middle /
+        last / selected shapes from MDC's segmented list; the ones below are what the
+        screen draws itself.
+    -->
+    <style name="Shape.Sujian.Paper" parent="ShapeAppearance.M3.Sys.Shape.Corner.Large" />
+    <style name="Shape.Sujian.Notice" parent="ShapeAppearance.M3.Sys.Shape.Corner.Medium" />
 
-    <!-- Typography: five roles, nothing in between. -->
+    <!-- Typography: M3E type roles, nothing in between. -->
     <style name="Text.Sujian" parent="">
         <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
     </style>
+    <!-- Section headers in the Android settings idiom: small, emphasised, primary. -->
     <style name="Text.Sujian.Section">
-        <item name="android:textAppearance">?attr/textAppearanceHeadlineSmallEmphasized</item>
-        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:textAppearance">?attr/textAppearanceTitleSmallEmphasized</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
     </style>
     <style name="Text.Sujian.Title">
         <item name="android:textAppearance">?attr/textAppearanceTitleMediumEmphasized</item>
-        <item name="android:textColor">?attr/colorOnSurface</item>
-    </style>
-    <style name="Text.Sujian.Label">
-        <item name="android:textAppearance">?attr/textAppearanceLabelLargeEmphasized</item>
         <item name="android:textColor">?attr/colorOnSurface</item>
     </style>
     <style name="Text.Sujian.Body">
@@ -67,26 +61,48 @@
         <item name="android:textAppearance">?attr/textAppearanceBodySmall</item>
         <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
     </style>
-    <style name="Text.Sujian.PreviewLabel">
-        <item name="android:textAppearance">?attr/textAppearanceLabelMediumEmphasized</item>
-        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+
+    <!-- Segmented list: official MDC list item parts, one surface for every item. -->
+    <style name="Widget.Sujian.Segment" parent="Widget.Material3.ListItemCardView.Segmented">
+        <item name="cardBackgroundColor">@color/segment_container</item>
+        <item name="android:minHeight">@dimen/touch_target</item>
+    </style>
+    <style name="Widget.Sujian.Segment.Choice">
+        <item name="contentPaddingTop">@dimen/space_md</item>
+        <item name="contentPaddingBottom">@dimen/space_md</item>
+    </style>
+    <style name="Widget.Sujian.SegmentRow" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:baselineAligned">false</item>
+        <item name="android:duplicateParentState">true</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:minHeight">@dimen/touch_target</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+    <style name="Widget.Sujian.Label" parent="Widget.Material3.TextView.ListItem.LabelText">
+        <item name="android:duplicateParentState">true</item>
+    </style>
+    <style name="Widget.Sujian.Supporting" parent="Widget.Material3.TextView.ListItem.SupportingText">
+        <item name="android:duplicateParentState">true</item>
+    </style>
+    <style name="Widget.Sujian.Overline" parent="Widget.Material3.TextView.ListItem.Overline">
+        <item name="android:duplicateParentState">true</item>
+    </style>
+    <style name="Widget.Sujian.Radio" parent="Widget.Material3.RadioButton.ListItem">
+        <item name="android:duplicateParentState">true</item>
+        <item name="android:importantForAccessibility">no</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">0dp</item>
     </style>
 
     <!-- Components inherit the expressive defaults and only state what is specific. -->
-    <style name="Widget.Sujian.StatusProgress" parent="Widget.Material3Expressive.CircularProgressIndicator">
-        <item name="indicatorSize">@dimen/status_progress_size</item>
-        <item name="trackThickness">@dimen/status_progress_track</item>
+    <style name="Widget.Sujian.Loading" parent="Widget.Material3.LoadingIndicator">
+        <item name="indicatorSize">@dimen/loading_indicator</item>
+        <item name="containerWidth">@dimen/list_leading</item>
+        <item name="containerHeight">@dimen/list_leading</item>
     </style>
-    <style name="Widget.Sujian.Segment" parent="Widget.Material3Expressive.Button.OutlinedButton">
-        <item name="backgroundTint">@color/segment_container</item>
-        <item name="android:textColor">@color/segment_label</item>
-        <item name="iconTint">@color/segment_label</item>
-        <item name="strokeColor">?attr/colorOutlineVariant</item>
-        <item name="android:minHeight">@dimen/touch_target</item>
-        <item name="android:maxWidth">@null</item>
-        <item name="android:singleLine">true</item>
-    </style>
-    <style name="Widget.Sujian.Export" parent="Widget.Material3Expressive.Button.TonalButton">
+    <style name="Widget.Sujian.Export" parent="Widget.Material3Expressive.Button">
         <item name="materialSizeOverlay">@style/SizeOverlay.Material3Expressive.Button.Medium</item>
         <item name="android:minHeight">@dimen/touch_target</item>
         <item name="android:singleLine">false</item>

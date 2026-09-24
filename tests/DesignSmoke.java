@@ -57,12 +57,24 @@ public final class DesignSmoke extends Instrumentation {
             launch();
             runOnMainSync(() -> {
                 check(mode() == MODE_BLANK, "unset settings start on the blank-spacing mode");
-                check(((Checkable) button(MODE_BLANK)).isChecked(), "the chosen mode is the checked segment");
-                check(group().getClass().getName()
-                        .equals("com.google.android.material.button.MaterialButtonToggleGroup"),
-                        "official MaterialButtonToggleGroup");
-                check(view("inputLayout").getVisibility() == View.GONE,
+                check(((Checkable) button(MODE_BLANK)).isChecked(), "the chosen mode is the checked item");
+                check(!((Checkable) button(MODE_HIDDEN)).isChecked()
+                        && !((Checkable) button(MODE_CUSTOM)).isChecked(), "only one item is checked");
+                check(button(MODE_BLANK).getClass().getSuperclass().getName()
+                        .equals("com.google.android.material.listitem.ListItemCardView"),
+                        "choices are official M3E segmented list items");
+                android.view.accessibility.AccessibilityNodeInfo node =
+                        button(MODE_BLANK).createAccessibilityNodeInfo();
+                check("android.widget.RadioButton".contentEquals(node.getClassName())
+                        && node.isCheckable() && node.isChecked(),
+                        "a choice is announced as a checked radio button");
+                check(node.getCollectionItemInfo() != null && node.getCollectionItemInfo().getRowIndex() == 1,
+                        "a choice announces its place in the list");
+                check(view("inputItem").getVisibility() == View.GONE,
                         "the text field only appears in the custom mode");
+                check(hasState(button(MODE_CUSTOM), "state_last"),
+                        "without the field the custom choice closes the group");
+                check(hasState(view("previewCard"), "state_first"), "the preview opens the group");
                 check(view("previewFooter").getVisibility() == View.VISIBLE
                         && view("previewWatermark").getVisibility() == View.INVISIBLE,
                         "blank spacing keeps the footer's height without its text");
@@ -74,12 +86,16 @@ public final class DesignSmoke extends Instrumentation {
                 check(preferences.getString("watermark_text", "x").isEmpty(), "hidden clears the text");
 
                 button(MODE_CUSTOM).performClick();
-                check(view("inputLayout").getVisibility() == View.VISIBLE, "custom reveals the text field");
+                check(view("inputItem").getVisibility() == View.VISIBLE, "custom reveals the text field");
+                check(hasState(button(MODE_CUSTOM), "state_middle"),
+                        "with the field shown the custom choice moves to the middle");
+                check(hasState(view("inputItem"), "state_last"), "and the field closes the group");
                 check(error() == null, "blank custom text is supported, not marked invalid");
-                check(text("modeDetail").getText().toString().contains("留白"),
+                check(String.valueOf(helper()).contains("留白"),
                         "empty custom explains the actual blank result");
                 edit().setText("  M3 Expressive  ");
                 check(error() == null, "a written custom line has no validation error");
+                check(helper() == null, "a written line needs no helper");
                 check(text("previewWatermark").getText().toString().equals("M3 Expressive"),
                         "the preview trims what it shows");
                 check(view("previewDivider").getVisibility() == View.VISIBLE,
@@ -157,7 +173,7 @@ public final class DesignSmoke extends Instrumentation {
                 check(mode() == MODE_CUSTOM, "a cold start reopens on the saved mode");
                 check(edit().getText().toString().equals("回到原处"),
                         "a cold start brings the saved line back");
-                check(view("inputLayout").getVisibility() == View.VISIBLE,
+                check(view("inputItem").getVisibility() == View.VISIBLE,
                         "a cold start reveals the field the mode needs");
                 button(MODE_BLANK).performClick();
                 flush();
@@ -212,8 +228,6 @@ public final class DesignSmoke extends Instrumentation {
             launch();
             runOnMainSync(() -> {
                 relayout(activity.getWindow().getDecorView());
-                check(group().getOrientation() == LinearLayout.VERTICAL,
-                        "the segments stack when three of them no longer fit");
                 checkTextBounds(activity.getWindow().getDecorView());
                 button(MODE_CUSTOM).performClick();
                 edit().setText("ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFG");
@@ -271,36 +285,34 @@ public final class DesignSmoke extends Instrumentation {
             ViewGroup scroll = (ViewGroup) view("scroll");
             View content = view("content");
             check(content.getWidth() > 0 && content.getHeight() > 0, "measured " + name);
-            if (status == STATUS_ACTIVE) {
-                check(view("statusDetail").getVisibility() == View.GONE,
-                        "a working module says nothing more");
-                check(view("statusRow").getBackground() == null,
-                        "a working module needs no container of its own");
-                check(view("statusRow").getPaddingLeft() == 0,
-                        "and stays level with the rest of the page");
-            } else {
-                check(view("statusRow").getBackground() != null,
-                        "a module that is not working gets a surface of its own");
-                check(view("statusDetail").getVisibility() == View.VISIBLE,
-                        "and says what to do about it");
-            }
             Object ui = field(activity, "ui");
+            int card = ((android.content.res.ColorStateList) invokeResult(view("statusCard"),
+                    "getCardBackgroundColor")).getDefaultColor();
+            if (status == STATUS_ACTIVE) {
+                check(card == (Integer) field(ui, "card"), "a working module sits on the plain list surface");
+            } else {
+                check(card == (Integer) field(ui, "errorContainer"),
+                        "a module that is not working turns its item into an error container");
+            }
+            check(view("statusDetail").getVisibility() == View.VISIBLE, "the status says what it means");
+            check(view("statusLoading").getVisibility() == View.GONE, "a settled status stops loading");
             View viewport = activity.getWindow().getDecorView();
-            write(name, viewport, (Integer) field(ui, "surface"));
-            write(name + "-page", scroll.getChildAt(0), (Integer) field(ui, "surface"));
-            checkContrast(ui, "ink", "surface");
-            checkContrast(ui, "muted", "surface");
-            checkContrast(ui, "muted", "container");
-            checkContrast(ui, "ink", "sheet");
-            checkContrast(ui, "muted", "sheet");
+            write(name, viewport, (Integer) field(ui, "page"));
+            write(name + "-page", scroll.getChildAt(0), (Integer) field(ui, "page"));
+            checkContrast(ui, "ink", "card");
+            checkContrast(ui, "muted", "card");
+            checkContrast(ui, "muted", "page");
+            checkContrast(ui, "primary", "page");
+            checkContrast(ui, "ink", "paper");
+            checkContrast(ui, "muted", "paper");
             checkContrast(ui, "onPrimary", "primary");
             checkContrast(ui, "onPrimaryContainer", "primaryContainer");
-            checkContrast(ui, "onSecondary", "secondary");
             checkContrast(ui, "onSecondaryContainer", "secondaryContainer");
             checkContrast(ui, "onTertiary", "tertiary");
             checkContrast(ui, "onTertiaryContainer", "tertiaryContainer");
+            checkContrast(ui, "onError", "error");
             checkContrast(ui, "onErrorContainer", "errorContainer");
-            check(view("statusRow").getHeight() >= dp(48), "status refresh target >= 48dp");
+            check(view("statusCard").getHeight() >= dp(48), "status refresh target >= 48dp");
             check(view("exportButton").getHeight() >= dp(48), "export target >= 48dp");
             for (int i = 0; i < 3; i++)
                 check(button(i).getHeight() >= dp(48), "mode target >= 48dp");
@@ -397,9 +409,20 @@ public final class DesignSmoke extends Instrumentation {
     private View view(String name) { return (View) field(activity, name); }
     private TextView text(String name) { return (TextView) view(name); }
     private EditText edit() { return (EditText) view("watermarkInput"); }
-    private LinearLayout group() { return (LinearLayout) view("modeGroup"); }
     private int mode() { return (Integer) field(activity, "mode"); }
-    private View button(int index) { return (View) Array.get(field(activity, "modeButtons"), index); }
+    private View button(int index) { return (View) Array.get(field(activity, "modeItems"), index); }
+    private CharSequence helper() {
+        Object layout = field(activity, "inputLayout");
+        try { return (CharSequence) layout.getClass().getMethod("getHelperText").invoke(layout); }
+        catch (Exception failure) { throw new RuntimeException(failure); }
+    }
+    /** ListItemLayout marks segment positions with the framework's state_first / middle / last. */
+    private boolean hasState(View view, String name) {
+        int attr = android.content.res.Resources.getSystem().getIdentifier(name, "attr", "android");
+        check(attr != 0, "resolved " + name);
+        for (int state : view.getDrawableState()) if (state == attr) return true;
+        return false;
+    }
     private CharSequence error() {
         Object layout = field(activity, "inputLayout");
         try { return (CharSequence) layout.getClass().getMethod("getError").invoke(layout); }
@@ -453,6 +476,10 @@ public final class DesignSmoke extends Instrumentation {
     }
     private static void invoke(Object target, String name) {
         try { java.lang.reflect.Method method = target.getClass().getDeclaredMethod(name); method.setAccessible(true); method.invoke(target); }
+        catch (Exception error) { throw new RuntimeException(error); }
+    }
+    private static Object invokeResult(Object target, String name) {
+        try { return target.getClass().getMethod(name).invoke(target); }
         catch (Exception error) { throw new RuntimeException(error); }
     }
     private static void set(Object target, String name, Object value) {

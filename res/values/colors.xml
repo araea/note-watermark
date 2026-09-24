@@ -14,6 +14,8 @@
     <color name="surface">#FFF8F0</color>
     <color name="on_surface">#201B13</color>
     <color name="on_surface_variant">#4E4639</color>
+    <color name="surface_bright">#FFF8F0</color>
+    <color name="surface_dim">#E3D9CC</color>
     <color name="surface_container_lowest">#FFFFFF</color>
     <color name="surface_container_low">#FBF2E4</color>
     <color name="surface_container">#F5EDDF</color>
