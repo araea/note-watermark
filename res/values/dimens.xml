@@ -11,6 +11,8 @@
     <dimen name="content_max_width">680dp</dimen>
     <dimen name="touch_target">48dp</dimen>
     <dimen name="icon_status">22dp</dimen>
+    <dimen name="status_progress_size">24dp</dimen>
+    <dimen name="status_progress_track">3dp</dimen>
     <dimen name="icon_inline">16dp</dimen>
     <dimen name="hairline">1dp</dimen>
     <dimen name="segment_padding">32dp</dimen>

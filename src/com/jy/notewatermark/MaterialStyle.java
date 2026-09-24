@@ -36,7 +36,7 @@ final class MaterialStyle {
         dark = (activity.getResources().getConfiguration().uiMode
                 & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         surface = color(com.google.android.material.R.attr.colorSurface);
-        sheet = color(com.google.android.material.R.attr.colorSurfaceContainerLowest);
+        sheet = color(com.google.android.material.R.attr.colorSurfaceContainerLow);
         container = color(com.google.android.material.R.attr.colorSurfaceContainer);
         ink = color(com.google.android.material.R.attr.colorOnSurface);
         muted = color(com.google.android.material.R.attr.colorOnSurfaceVariant);
@@ -67,13 +67,6 @@ final class MaterialStyle {
         MaterialShapeDrawable drawable =
                 new MaterialShapeDrawable(ShapeAppearanceModel.builder(activity, style, 0).build());
         drawable.setFillColor(ColorStateList.valueOf(fill));
-        return drawable;
-    }
-
-    /** A hairline keeps the preview readable when sheet and surface are nearly the same tone. */
-    MaterialShapeDrawable outlinedShape(int fill, int stroke, int style) {
-        MaterialShapeDrawable drawable = shape(fill, style);
-        drawable.setStroke(dimen(R.dimen.hairline), ColorStateList.valueOf(stroke));
         return drawable;
     }
 

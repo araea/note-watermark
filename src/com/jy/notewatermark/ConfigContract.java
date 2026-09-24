@@ -10,6 +10,8 @@ final class ConfigContract {
     static final String PREFS = "settings";
     static final String KEY_WATERMARK_TEXT = "watermark_text";
     static final String KEY_KEEP_BLANK_SPACE = "keep_blank_space";
+    /** UI-only selection: the hook still reads the two existing keys. */
+    static final String KEY_SELECTED_MODE = "selected_mode";
     static final String KEY_EXPORT_REQUEST = "export_request";
     /** Remembered so switching away from the custom mode does not throw the text away. */
     static final String KEY_LAST_CUSTOM_TEXT = "last_custom_text";

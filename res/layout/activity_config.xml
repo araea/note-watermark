@@ -33,6 +33,7 @@
 
             <com.google.android.material.appbar.MaterialToolbar
                 android:id="@+id/toolbar"
+                style="@style/Widget.Material3Expressive.Toolbar"
                 android:layout_width="match_parent"
                 android:layout_height="?attr/actionBarSize"
                 app:layout_collapseMode="pin" />
@@ -76,7 +77,7 @@
 
                     <com.google.android.material.progressindicator.CircularProgressIndicator
                         android:id="@+id/statusSpinner"
-                        style="@style/Widget.Material3.CircularProgressIndicator.ExtraSmall"
+                        style="@style/Widget.Sujian.StatusProgress"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:importantForAccessibility="no"
@@ -130,10 +131,18 @@
                     android:padding="@dimen/space_xl">
 
                     <TextView
+                        android:id="@+id/previewLabel"
+                        style="@style/Text.Sujian.PreviewLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/preview_label" />
+
+                    <TextView
                         android:id="@+id/sampleTitle"
                         style="@style/Text.Sujian.Title"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_lg"
                         android:text="@string/preview_sample_title" />
 
                     <TextView
@@ -180,6 +189,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/space_xl"
+                    android:contentDescription="@string/mode_group_label"
                     app:selectionRequired="true"
                     app:singleSelection="true">
 
@@ -213,7 +223,8 @@
                     style="@style/Text.Sujian.Body"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/space_md" />
+                    android:layout_marginTop="@dimen/space_md"
+                    android:accessibilityLiveRegion="polite" />
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/inputLayout"

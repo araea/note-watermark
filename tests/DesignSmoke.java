@@ -52,7 +52,7 @@ public final class DesignSmoke extends Instrumentation {
             preferences = getTargetContext().getSharedPreferences("settings", 0);
             original = preferences.getAll();
             preferences.edit().remove("watermark_text").remove("keep_blank_space")
-                    .remove("last_custom_text").commit();
+                    .remove("last_custom_text").remove("selected_mode").commit();
             launch();
             runOnMainSync(() -> {
                 check(mode() == MODE_BLANK, "unset settings start on the blank-spacing mode");
@@ -74,9 +74,11 @@ public final class DesignSmoke extends Instrumentation {
 
                 button(MODE_CUSTOM).performClick();
                 check(view("inputLayout").getVisibility() == View.VISIBLE, "custom reveals the text field");
-                check(error() != null, "an empty custom watermark is called out");
+                check(error() == null, "blank custom text is supported, not marked invalid");
+                check(text("modeDetail").getText().toString().contains("留白"),
+                        "empty custom explains the actual blank result");
                 edit().setText("  M3 Expressive  ");
-                check(error() == null, "the callout clears once something is written");
+                check(error() == null, "a written custom line has no validation error");
                 check(text("previewWatermark").getText().toString().equals("M3 Expressive"),
                         "the preview trims what it shows");
                 check(view("previewDivider").getVisibility() == View.VISIBLE,
@@ -156,6 +158,22 @@ public final class DesignSmoke extends Instrumentation {
                         "a cold start brings the saved line back");
                 check(view("inputLayout").getVisibility() == View.VISIBLE,
                         "a cold start reveals the field the mode needs");
+                button(MODE_BLANK).performClick();
+                flush();
+            });
+            close();
+
+            launch();
+            runOnMainSync(() -> {
+                button(MODE_CUSTOM).performClick();
+                edit().setText("");
+                flush();
+            });
+            close();
+            launch();
+            runOnMainSync(() -> {
+                check(mode() == MODE_CUSTOM, "empty custom selection survives a cold start");
+                check(edit().length() == 0, "empty custom draft stays empty on cold start");
                 button(MODE_BLANK).performClick();
                 flush();
             });
@@ -272,7 +290,6 @@ public final class DesignSmoke extends Instrumentation {
             checkContrast(ui, "ink", "surface");
             checkContrast(ui, "muted", "surface");
             checkContrast(ui, "muted", "container");
-            checkContrast(ui, "tertiary", "surface");
             checkContrast(ui, "ink", "sheet");
             checkContrast(ui, "muted", "sheet");
             checkContrast(ui, "onPrimary", "primary");
@@ -282,6 +299,10 @@ public final class DesignSmoke extends Instrumentation {
             checkContrast(ui, "onTertiary", "tertiary");
             checkContrast(ui, "onTertiaryContainer", "tertiaryContainer");
             checkContrast(ui, "onErrorContainer", "errorContainer");
+            check(view("statusRow").getHeight() >= dp(48), "status refresh target >= 48dp");
+            check(view("exportButton").getHeight() >= dp(48), "export target >= 48dp");
+            for (int i = 0; i < 3; i++)
+                check(button(i).getHeight() >= dp(48), "mode target >= 48dp");
         });
     }
 
@@ -331,6 +352,10 @@ public final class DesignSmoke extends Instrumentation {
         } finally {
             image.recycle();
         }
+    }
+
+    private int dp(int value) {
+        return Math.round(value * activity.getResources().getDisplayMetrics().density);
     }
 
     private void checkContrast(Object ui, String foreground, String background) {

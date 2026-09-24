@@ -53,7 +53,7 @@ public final class ConfigActivity extends Activity {
     private LinearLayout content, statusRow, statusText, previewSheet, previewFooter;
     private CircularProgressIndicator statusSpinner;
     private ImageView statusIcon, exportPrivacyIcon;
-    private TextView statusTitle, statusDetail, sampleTitle, sampleBody, previewWatermark,
+    private TextView statusTitle, statusDetail, previewLabel, sampleTitle, sampleBody, previewWatermark,
             modeDetail, exportStatus, exportPrivacy, versionLabel;
     private View previewDivider;
     private MaterialButtonToggleGroup modeGroup;
@@ -93,10 +93,13 @@ public final class ConfigActivity extends Activity {
 
         String saved = prefs.getString(ConfigContract.KEY_WATERMARK_TEXT, "");
         boolean keepBlank = prefs.getBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, true);
-        mode = state != null ? state.getInt("mode")
-                : !saved.isEmpty() ? MODE_CUSTOM : keepBlank ? MODE_BLANK : MODE_HIDDEN;
+        int legacyMode = !saved.isEmpty() ? MODE_CUSTOM : keepBlank ? MODE_BLANK : MODE_HIDDEN;
+        int selectedMode = prefs.getInt(ConfigContract.KEY_SELECTED_MODE, legacyMode);
+        mode = state != null ? state.getInt("mode", legacyMode)
+                : selectedMode >= MODE_HIDDEN && selectedMode <= MODE_CUSTOM ? selectedMode : legacyMode;
+        String lastCustom = prefs.getString(ConfigContract.KEY_LAST_CUSTOM_TEXT, "");
         watermarkInput.setText(state != null ? state.getString("draft", "")
-                : saved.isEmpty() ? prefs.getString(ConfigContract.KEY_LAST_CUSTOM_TEXT, "") : saved);
+                : !saved.isEmpty() ? saved : mode == MODE_CUSTOM ? "" : lastCustom);
         watermarkInput.setSelection(watermarkInput.length());
 
         modeGroup.check(modeButtons[mode].getId());
@@ -148,6 +151,7 @@ public final class ConfigActivity extends Activity {
         previewFooter = findViewById(R.id.previewFooter);
         previewDivider = findViewById(R.id.previewDivider);
         previewWatermark = findViewById(R.id.previewWatermark);
+        previewLabel = findViewById(R.id.previewLabel);
         sampleTitle = findViewById(R.id.sampleTitle);
         sampleBody = findViewById(R.id.sampleBody);
         modeGroup = findViewById(R.id.modeGroup);
@@ -167,19 +171,20 @@ public final class ConfigActivity extends Activity {
 
     /** Everything a token cannot express in XML: tinted shapes, limits, measured layout. */
     private void paint() {
-        previewSheet.setBackground(ui.outlinedShape(ui.sheet, ui.outline, R.style.Shape_Sujian_Sheet));
+        previewSheet.setBackground(ui.shape(ui.sheet, R.style.Shape_Sujian_Sheet));
         previewDivider.setBackgroundColor(ui.outline);
-        exportPrivacy.setTextColor(ui.tertiary);
-        exportPrivacyIcon.setImageTintList(android.content.res.ColorStateList.valueOf(ui.tertiary));
+        exportPrivacy.setTextColor(ui.muted);
+        exportPrivacyIcon.setImageTintList(android.content.res.ColorStateList.valueOf(ui.muted));
         watermarkInput.setFilters(new InputFilter[] { new InputFilter.LengthFilter(80) });
         versionLabel.setText(getString(R.string.version_footer, versionName()));
         heading(findViewById(R.id.shareSection));
         heading(findViewById(R.id.exportSection));
-        for (View child : new View[] { sampleTitle, sampleBody, previewFooter }) {
+        for (View child : new View[] { previewLabel, sampleTitle, sampleBody, previewFooter }) {
             child.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         }
         previewSheet.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
         exportStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        statusRow.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         statusText.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         content.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             int width = Math.min(((ViewGroup) content.getParent()).getWidth(),
@@ -237,7 +242,7 @@ public final class ConfigActivity extends Activity {
                 : written ? getString(R.string.mode_custom_detail)
                 : getString(R.string.mode_custom_empty));
         inputLayout.setVisibility(custom ? View.VISIBLE : View.GONE);
-        inputLayout.setError(custom && !written ? getString(R.string.watermark_error) : null);
+        // An empty custom line is a supported blank footer, not a validation error.
         previewSheet.setContentDescription(getString(R.string.share_section) + "：" + modeDetail.getText()
                 + (written ? draft() : ""));
     }
@@ -249,8 +254,7 @@ public final class ConfigActivity extends Activity {
      */
     private void renderStatus() {
         boolean quiet = status == STATUS_ACTIVE || status == STATUS_CHECKING;
-        int foreground = status == STATUS_CHECKING ? ui.muted
-                : status == STATUS_ACTIVE ? ui.tertiary
+        int foreground = status == STATUS_CHECKING || status == STATUS_ACTIVE ? ui.muted
                 : status == STATUS_STALE ? ui.onSecondaryContainer : ui.onErrorContainer;
         statusRow.setBackground(quiet ? null : ui.shape(
                 status == STATUS_STALE ? ui.secondaryContainer : ui.errorContainer,
@@ -312,15 +316,16 @@ public final class ConfigActivity extends Activity {
         String watermark = mode == MODE_CUSTOM ? draft() : "";
         boolean keepBlank = mode != MODE_HIDDEN;
         if (watermark.equals(prefs.getString(ConfigContract.KEY_WATERMARK_TEXT, ""))
-                && keepBlank == prefs.getBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, true)) {
+                && keepBlank == prefs.getBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, true)
+                && mode == prefs.getInt(ConfigContract.KEY_SELECTED_MODE, -1)) {
             return;
         }
         SharedPreferences.Editor edit = prefs.edit()
                 .putString(ConfigContract.KEY_WATERMARK_TEXT, watermark)
-                .putBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, keepBlank);
+                .putBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, keepBlank)
+                .putInt(ConfigContract.KEY_SELECTED_MODE, mode);
         if (!watermark.isEmpty()) edit.putString(ConfigContract.KEY_LAST_CUSTOM_TEXT, watermark);
         edit.apply();
-        previewSheet.announceForAccessibility(getString(R.string.apply_announcement));
     }
 
     /** Nothing off-screen needs to animate, and a transition cut short by a stop would

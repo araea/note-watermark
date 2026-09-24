@@ -34,6 +34,10 @@ ColorOS 便签模块：决定分享长图底部留下什么，并把全部便签
 
 在同一页选择「导出全部便签」。ZIP 保存到系统「下载」目录，按便签分类写入文本、HTML 与附件。加密便签不导出，只在导出说明中计数。
 
+## 设计
+
+设置页与图标使用同一套 [Material 3 Expressive 设计令牌和无障碍准则](artwork/DESIGN.md)；Apple HIG 只用于交互与平台体验核对，不混用视觉样式。
+
 ## 构建与测试
 
 需要 JDK 17 以上与 Android SDK（platform 35、build-tools 35.0.0），SDK 路径写进 `local.properties` 的 `sdk.dir`。Termux 下 `build.sh` 会改用系统 `aapt2`。

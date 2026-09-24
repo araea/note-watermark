@@ -18,6 +18,8 @@
 
     <!-- The one thing this module changes. -->
     <string name="share_section">分享长图底部</string>
+    <string name="preview_label">效果预览</string>
+    <string name="mode_group_label">水印显示方式</string>
     <string name="mode_hidden">不显示</string>
     <string name="mode_blank">留白</string>
     <string name="mode_custom">自定义</string>
@@ -26,13 +28,11 @@
     <string name="mode_custom_detail">保留分隔线，把水印换成你写的一句话。</string>
     <string name="mode_custom_empty">还没有写水印文字，此时与「留白」相同。</string>
     <string name="watermark_hint">水印文字</string>
-    <string name="watermark_error">请输入水印文字</string>
     <string name="preview_sample_title">今天的灵感</string>
     <string name="preview_sample_body">一些想法，一点日常。每一次记录，都保留本来的样子。</string>
     <string name="preview_sample_watermark">ColorOS 便签</string>
     <string name="preview_note">示意效果，以便签实际分享为准。</string>
     <string name="apply_hint">改动即时保存，重新打开便签的分享页后生效。</string>
-    <string name="apply_announcement">已保存，重新打开便签分享页后生效</string>
 
     <!-- Backup -->
     <string name="export_section">导出便签</string>

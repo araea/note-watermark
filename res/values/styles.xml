@@ -34,16 +34,13 @@
         <item name="shapeAppearanceLargeComponent">@style/Shape.Sujian.Large</item>
     </style>
 
-    <!-- Shape: rounder as an element grows more important; the sheet keeps a cut
-         corner so the share preview reads as a page, the way the launcher icon does. -->
+    <!-- Component shapes use the same rounded family as the launcher page. -->
     <style name="Shape.Sujian.Small" parent="ShapeAppearance.Material3.Corner.Small"><item name="cornerSize">12dp</item></style>
     <style name="Shape.Sujian.Medium" parent="ShapeAppearance.Material3.Corner.Medium"><item name="cornerSize">20dp</item></style>
     <style name="Shape.Sujian.Large" parent="ShapeAppearance.Material3.Corner.Large"><item name="cornerSize">28dp</item></style>
     <style name="Shape.Sujian.Pill" parent="ShapeAppearance.Material3.Corner.Full" />
     <style name="Shape.Sujian.Sheet" parent="ShapeAppearance.Material3.Corner.ExtraLarge">
-        <item name="cornerSize">24dp</item>
-        <item name="cornerFamilyTopRight">cut</item>
-        <item name="cornerSizeTopRight">20dp</item>
+        <item name="cornerSize">28dp</item>
     </style>
 
     <!-- Typography: five roles, nothing in between. -->
@@ -70,8 +67,16 @@
         <item name="android:textAppearance">?attr/textAppearanceBodySmall</item>
         <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
     </style>
+    <style name="Text.Sujian.PreviewLabel">
+        <item name="android:textAppearance">?attr/textAppearanceLabelMediumEmphasized</item>
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+    </style>
 
     <!-- Components inherit the expressive defaults and only state what is specific. -->
+    <style name="Widget.Sujian.StatusProgress" parent="Widget.Material3Expressive.CircularProgressIndicator">
+        <item name="indicatorSize">@dimen/status_progress_size</item>
+        <item name="trackThickness">@dimen/status_progress_track</item>
+    </style>
     <style name="Widget.Sujian.Segment" parent="Widget.Material3Expressive.Button.OutlinedButton">
         <item name="backgroundTint">@color/segment_container</item>
         <item name="android:textColor">@color/segment_label</item>
