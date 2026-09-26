@@ -1,6 +1,6 @@
 # 素笺
 
-ColorOS 便签模块：调整分享长图底部水印，并将便签导出为 ZIP。
+ColorOS 便签模块：去水印、自定义水印与便签导出。
 
 已按 ColorOS 16.0.10、便签 16.7.2 核验；其他版本需实机验证。支持的分享页面和运行条件见[项目说明](https://github.com/araea/note-watermark#运行条件)。
 
