@@ -7,7 +7,7 @@ python scripts/generate-icons.py
 python scripts/generate-icons.py --check
 ```
 
-生成的 `res/` 文件纳入 Git，普通 APK 构建不需要 Python。市场 PNG 从同一 SVG 导出；需要 `puppeteer-core` 与 Chromium：
+生成的 `res/` 文件纳入 Git，普通 APK 构建不需要 Python。市场 PNG 从同一 SVG 导出，需要 `puppeteer-core` 与 Chromium：
 
 ```sh
 CHROMIUM=/path/to/chromium node scripts/render-icon.cjs

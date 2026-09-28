@@ -1,4 +1,4 @@
-ColorOS 便签模块：去水印、自定义水印与便签导出。
+ColorOS 便签去水印、自定义水印与便签导出。
 
 已按 ColorOS 16.0.10、便签 16.7.2 核验；其他版本需实机验证。
 
@@ -20,6 +20,6 @@ ColorOS 便签模块：去水印、自定义水印与便签导出。
 
 分享页只接管已识别的 NearMe、ColorOS 和 OPlus 路径。无法可靠识别时不会修改便签。
 
-## 必要链接
+## 链接
 
-- 源码：https://github.com/araea/note-watermark
+- [源码](https://github.com/araea/note-watermark)
