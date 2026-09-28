@@ -1,6 +1,9 @@
+# 素笺（note-watermark）
+
 ColorOS 便签模块：去水印、自定义水印与便签导出。
 
-已按 ColorOS 16.0.10、便签 16.7.2 核验。其他版本需实机验证。分享页只接管已识别的 NearMe、ColorOS 和 OPlus 路径；无法可靠识别时不会修改便签。
+[![GitHub](https://img.shields.io/badge/GitHub-仓库-181717)](https://github.com/araea/note-watermark)
+[![Xposed-Modules-Repo](https://img.shields.io/badge/Xposed%20Modules%20Repo-模块-2ea44f)](https://github.com/Xposed-Modules-Repo/com.jy.notewatermark)
 
 ## 安装
 
@@ -15,7 +18,9 @@ ColorOS 便签模块：去水印、自定义水印与便签导出。
 
 升级后需再次打开「素笺」，让便签读取设置。ColorOS 不允许便签主动启动素笺。
 
-## 分享长图
+## 快速使用
+
+### 分享长图
 
 底部样式三选一，重新打开便签分享页后生效：
 
@@ -25,7 +30,7 @@ ColorOS 便签模块：去水印、自定义水印与便签导出。
 
 页面预览使用相同规则。切换样式不会清除已保存的自定义文字。
 
-## 导出
+### 导出
 
 在「素笺」中选择「导出全部便签」。ZIP 保存到系统「下载」目录，按分类导出文本、HTML 和附件。加密便签不会导出，只在结果中计数。
 
@@ -43,47 +48,14 @@ ColorOS 便签模块：去水印、自定义水印与便签导出。
 
 注入的钩子只读取 `watermark_text` 与 `keep_blank_space`。
 
-## 构建
+## 限制与风险
 
-需要 JDK 17 以上、Android SDK platform 35、build-tools 35.0.0。将 SDK 路径写入 `local.properties` 的 `sdk.dir`；Termux 下 `build.sh` 使用系统 `aapt2`。
+已按 ColorOS 16.0.10、便签 16.7.2 核验。其他版本需实机验证。
 
-```sh
-./build.sh
-```
+分享页只接管已识别的 NearMe、ColorOS 和 OPlus 路径。无法可靠识别时不会修改便签。
 
-APK 输出到 `build/NoteWatermark.apk`。首次构建在 `keystore/` 生成签名密钥，该目录不入库。备份密钥和每版 APK；更换密钥后需先卸载旧版。
+## 必要链接
 
-构建环境：
-
-- Gradle 8.13（wrapper），Android Gradle Plugin 8.11.1
-- `compileSdk` 35，`minSdk` 26，`targetSdk` 34
-- 依赖 `io.github.libxposed:api:102.0.0`、`com.google.android.material:material:1.14.0`
-- `versionCode` 18，`versionName` 4.1.1
-
-模块以 libxposed API 102 注册，入口类 `com.jy.notewatermark.Main`。注册文件位于 `resources/META-INF/xposed/`：
-
-- `module.prop`：`minApiVersion=102`、`targetApiVersion=102`、`staticScope=true`
-- `scope.list`：`com.coloros.note`
-- `java_init.list`：`com.jy.notewatermark.Main`
-
-旧式 `xposedmodule` / `xposedminversion` 等 `meta-data` 已不再使用。
-
-## 测试
-
-真机设计测试还需下载 R8：
-
-```sh
-curl -fsSL -o libs/r8.jar https://maven.google.com/com/android/tools/r8/8.9.35/r8-8.9.35.jar
-bash tests/build.sh
-am instrument -w com.jy.notewatermark.test/.DesignSmoke
-```
-
-测试不导出真实便签；完成后恢复原设置。
-
-## 发布
-
-正式发布只通过[模块市场](https://modules.lsposed.org/module/com.jy.notewatermark/)。发布脚本位于 `marketplace/publish.sh`。界面规范见[设计系统](artwork/DESIGN.md)。
-
-## 许可证
-
-可按 [Apache-2.0](LICENSE-APACHE) 或 [MIT](LICENSE-MIT) 使用。
+- 模块市场：https://modules.lsposed.org/module/com.jy.notewatermark/
+- 源码：https://github.com/araea/note-watermark
+- 许可证：[Apache-2.0](LICENSE-APACHE) / [MIT](LICENSE-MIT)
