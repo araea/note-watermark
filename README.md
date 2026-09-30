@@ -52,7 +52,7 @@ ColorOS 便签模块：去水印、自定义水印与便签导出
 
 分享页只接管已识别的 NearMe、ColorOS 和 OPlus 路径。无法可靠识别时不会修改便签。
 
-## 链接
+## 必要链接
 
 - [模块市场](https://modules.lsposed.org/module/com.jy.notewatermark/)
 - [MIT](LICENSE-MIT) / [Apache-2.0](LICENSE-APACHE)
