@@ -1,10 +1,10 @@
 ColorOS 便签模块：去水印、自定义水印与便签导出。
 
-已按 ColorOS 16.0.10、便签 16.7.2 核验；其他版本需实机验证。
+按 ColorOS 16.0.10、便签 16.7.2 核验，其他版本需实机验证。
 
 ## 安装
 
-从[模块市场](https://modules.lsposed.org/module/com.jy.notewatermark/)安装 `NoteWatermark.apk`，在支持 libxposed API 102 的框架中启用，再冷启动便签。模块作用域固定为 `com.coloros.note`，不需要手动添加。启用或升级后，打开一次「素笺」以同步设置。
+从[模块市场](https://modules.lsposed.org/module/com.jy.notewatermark/)安装 `NoteWatermark.apk`，在支持 libxposed API 102 的框架中启用，再冷启动便签。作用域固定为 `com.coloros.note`。启用或升级后打开一次「素笺」以同步设置。
 
 ## 快速使用
 
@@ -20,6 +20,6 @@ ColorOS 便签模块：去水印、自定义水印与便签导出。
 
 分享页只接管已识别的 NearMe、ColorOS 和 OPlus 路径。无法可靠识别时不会修改便签。
 
-## 必要链接
+## 链接
 
 - [源码](https://github.com/araea/note-watermark)
