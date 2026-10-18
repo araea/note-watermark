@@ -37,11 +37,12 @@ import java.util.concurrent.Executors;
 /**
  * One screen for the one setting this module owns, plus the backup errand.
  *
- * The share preview is the subject: it shows the footer of the picture the Notes
- * app is about to produce, and the radio list right under it names the three
+ * The share preview is the subject: it shows the footer of the picture the notes
+ * apps are about to produce, and the radio list right under it names the three
  * outcomes the hook can actually produce, each with what it does. Choices apply as
  * they are made, so there is no draft state, no save bar and no "are you sure" on
- * the way out.
+ * the way out. The setting is shared by both apps (「笔记」 and 「便签」); each gets its
+ * own status line and its own export button, for the ones that are installed.
  */
 public final class ConfigActivity extends Activity {
     /** The three states {@link Main} can put the share footer in. */
@@ -49,9 +50,10 @@ public final class ConfigActivity extends Activity {
 
     private static final int STATUS_CHECKING = 0, STATUS_ACTIVE = NotesBridge.ACTIVE,
             STATUS_STALE = NotesBridge.STALE, STATUS_INACTIVE = NotesBridge.INACTIVE,
-            STATUS_MISSING = NotesBridge.MISSING;
+            STATUS_MISSING = NotesBridge.MISSING, STATUS_IDLE = NotesBridge.IDLE,
+            STATUS_SCOPE = NotesBridge.NEEDS_SCOPE;
 
-    /** One queue for every hand-off to Notes, so a later setting never lands before an earlier one. */
+    /** One queue for every hand-off to the apps, so a later setting never lands before an earlier one. */
     private static final ExecutorService BRIDGE = Executors.newSingleThreadExecutor();
 
     /** Long enough that typing is not saved letter by letter, short enough to feel immediate. */
@@ -61,26 +63,31 @@ public final class ConfigActivity extends Activity {
     private SharedPreferences prefs;
 
     private NestedScrollView scroll;
-    private LinearLayout content, shareGroup, statusText, previewSheet, previewFooter;
-    private ListItemCardView statusCard, previewCard;
+    private LinearLayout content, shareGroup, statusGroup, previewSheet, previewFooter;
+    private ListItemCardView previewCard;
     private ChoiceItem[] modeItems;
-    private LoadingIndicator statusLoading;
-    private ImageView statusIcon, statusAction, exportPrivacyIcon;
-    private TextView statusTitle, statusDetail, previewLabel, sampleTitle, sampleBody, previewWatermark,
+    private ImageView exportPrivacyIcon;
+    private TextView previewLabel, sampleTitle, sampleBody, previewWatermark,
             exportStatus, exportPrivacy, versionLabel;
     private View previewDivider, inputItem;
     private TextInputLayout inputLayout;
     private TextInputEditText watermarkInput;
-    private MaterialButton exportButton;
+    private MaterialButton[] exportButtons;
     private LinearProgressIndicator exportProgress;
+    /** One per app, in {@link NotesApp#ALL} order; only the installed ones are shown. */
+    private StatusRow[] rows;
 
     private boolean resumed;
     private int mode = MODE_BLANK;
-    private int status = STATUS_CHECKING;
-    private boolean checking;
     private ExportJob exportJob;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Runnable persist = this::persist;
+    /** The framework's binder can arrive after the screen is up: hand it the settings and look again. */
+    private final Remote.Listener remoteListener = () -> main.post(() -> {
+        if (isFinishing() || isDestroyed()) return;
+        publish();
+        checkModule();
+    });
 
     @Override protected void onCreate(Bundle state) {
         DynamicColors.applyToActivityIfAvailable(this);
@@ -88,6 +95,8 @@ public final class ConfigActivity extends Activity {
         ui = new MaterialStyle(this);
         ui.applyWindow();
         prefs = getSharedPreferences(ConfigContract.PREFS, 0);
+        Remote.listen(remoteListener);
+        Remote.init();
         setContentView(R.layout.activity_config);
         bind();
         paint();
@@ -99,6 +108,7 @@ public final class ConfigActivity extends Activity {
                     ? getString(R.string.export_interrupted)
                     : state.getString("exportMessage", exportJob.message);
             exportJob.failed = state.getBoolean("exportFailed");
+            exportJob.app = NotesApp.forPackage(state.getString("exportApp", ""));
         }
         exportJob.activity = new WeakReference<>(this);
 
@@ -131,13 +141,21 @@ public final class ConfigActivity extends Activity {
             hideKeyboard();
             return true;
         });
-        statusCard.setOnClickListener(v -> checkModule());
-        exportButton.setOnClickListener(v -> startExport());
+        for (StatusRow row : rows) {
+            row.card.setOnClickListener(v -> {
+                if (row.status == STATUS_SCOPE) requestScope(row); else check(row);
+            });
+        }
+        for (int i = 0; i < exportButtons.length; i++) {
+            final NotesApp app = NotesApp.ALL[i];
+            exportButtons[i].setOnClickListener(v -> startExport(app));
+        }
 
         render();
         renderExport();
         renderStatus();
         segments(shareGroup);
+        segments(statusGroup);
         checkModule();
         if (state != null) scroll.post(() -> scroll.scrollTo(0, state.getInt("scroll")));
     }
@@ -145,13 +163,11 @@ public final class ConfigActivity extends Activity {
     private void bind() {
         scroll = findViewById(R.id.scroll);
         content = findViewById(R.id.content);
-        statusCard = findViewById(R.id.statusCard);
-        statusText = findViewById(R.id.statusText);
-        statusLoading = findViewById(R.id.statusLoading);
-        statusIcon = findViewById(R.id.statusIcon);
-        statusAction = findViewById(R.id.statusAction);
-        statusTitle = findViewById(R.id.statusTitle);
-        statusDetail = findViewById(R.id.statusDetail);
+        statusGroup = findViewById(R.id.statusGroup);
+        rows = new StatusRow[] {
+            new StatusRow(NotesApp.PAPER, findViewById(R.id.statusPaper)),
+            new StatusRow(NotesApp.NOTES, findViewById(R.id.statusNotes)),
+        };
         shareGroup = findViewById(R.id.shareGroup);
         previewCard = findViewById(R.id.previewCard);
         previewSheet = findViewById(R.id.previewSheet);
@@ -167,7 +183,9 @@ public final class ConfigActivity extends Activity {
         inputItem = findViewById(R.id.inputItem);
         inputLayout = findViewById(R.id.inputLayout);
         watermarkInput = findViewById(R.id.watermarkInput);
-        exportButton = findViewById(R.id.exportButton);
+        exportButtons = new MaterialButton[] {
+            findViewById(R.id.exportPaper), findViewById(R.id.exportNotes),
+        };
         exportProgress = findViewById(R.id.exportProgress);
         exportStatus = findViewById(R.id.exportStatus);
         exportPrivacy = findViewById(R.id.exportPrivacy);
@@ -184,7 +202,6 @@ public final class ConfigActivity extends Activity {
         versionLabel.setText(getString(R.string.version_footer, versionName()));
         heading(findViewById(R.id.shareSection));
         heading(findViewById(R.id.exportSection));
-        ((ListItemLayout) findViewById(R.id.statusItem)).updateAppearance(0, 1);
         ((ListItemLayout) findViewById(R.id.exportItem)).updateAppearance(0, 1);
 
         // The preview is one summary node; its sample text is not read out line by line.
@@ -192,8 +209,10 @@ public final class ConfigActivity extends Activity {
         previewCard.setFocusable(true);
         ((View) previewLabel.getParent()).setImportantForAccessibility(
                 View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
-        statusText.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
-        statusCard.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        for (StatusRow row : rows) {
+            row.text.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+            row.card.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        }
         exportStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         findViewById(R.id.exportPrivacyRow).setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
 
@@ -268,7 +287,7 @@ public final class ConfigActivity extends Activity {
         previewFooter.setVisibility(mode == MODE_HIDDEN ? View.GONE : View.VISIBLE);
         previewDivider.setVisibility(written ? View.VISIBLE : View.INVISIBLE);
         previewWatermark.setVisibility(written ? View.VISIBLE : View.INVISIBLE);
-        previewWatermark.setText(written ? draft() : getString(R.string.preview_sample_watermark));
+        previewWatermark.setText(written ? draft() : getString(sampleBrand()));
 
         for (int i = 0; i < modeItems.length; i++) modeItems[i].setChecked(mode == i);
         if ((inputItem.getVisibility() == View.VISIBLE) != custom) {
@@ -284,55 +303,36 @@ public final class ConfigActivity extends Activity {
                 + getString(R.string.share_section) + "：" + outcome);
     }
 
-    /**
-     * A module that works needs no container: a glyph and a line of text, level with
-     * everything else on the page. Only a module that is not working gets a filled
-     * surface and a second line saying what to do about it.
-     */
+    /** The brand word the real picture would carry, for whichever app is installed (the newer one first). */
+    private int sampleBrand() {
+        return rows[0].installed || !rows[1].installed
+                ? R.string.preview_sample_watermark_paper : R.string.preview_sample_watermark_notes;
+    }
+
     private void renderStatus() {
-        boolean checkingNow = status == STATUS_CHECKING;
-        boolean quiet = checkingNow || status == STATUS_ACTIVE;
-        boolean stale = status == STATUS_STALE;
-        int surface = quiet ? ui.card : stale ? ui.tertiaryContainer : ui.errorContainer;
-        int onSurface = quiet ? ui.ink : stale ? ui.onTertiaryContainer : ui.onErrorContainer;
-        int onSurfaceVariant = quiet ? ui.muted : onSurface;
-        statusCard.setCardBackgroundColor(surface);
-        statusTitle.setTextColor(onSurface);
-        statusDetail.setTextColor(onSurfaceVariant);
-        statusAction.setImageTintList(ColorStateList.valueOf(onSurfaceVariant));
-
-        statusLoading.setVisibility(checkingNow ? View.VISIBLE : View.GONE);
-        statusIcon.setVisibility(checkingNow ? View.GONE : View.VISIBLE);
-        statusAction.setVisibility(checkingNow ? View.INVISIBLE : View.VISIBLE);
-        if (!checkingNow) {
-            boolean active = status == STATUS_ACTIVE;
-            statusIcon.setBackground(ui.badge(active ? MaterialShapes.COOKIE_9 : MaterialShapes.SUNNY,
-                    active ? ui.primaryContainer : stale ? ui.tertiary : ui.error));
-            statusIcon.setImageResource(active ? R.drawable.ic_status_active
-                    : stale ? R.drawable.ic_refresh : R.drawable.ic_status_alert);
-            statusIcon.setImageTintList(ColorStateList.valueOf(
-                    active ? ui.onPrimaryContainer : stale ? ui.onTertiary : ui.onError));
+        boolean any = false;
+        for (StatusRow row : rows) any |= row.installed;
+        for (StatusRow row : rows) {
+            // With neither app installed the first row stays, to say so.
+            row.item.setVisibility(row.installed || (!any && row == rows[0]) ? View.VISIBLE : View.GONE);
+            row.render();
         }
-
-        statusTitle.setText(checkingNow ? R.string.status_checking
-                : status == STATUS_ACTIVE ? R.string.status_active
-                : stale ? R.string.status_stale
-                : status == STATUS_MISSING ? R.string.status_missing : R.string.status_inactive);
-        statusDetail.setText(checkingNow ? getString(R.string.status_checking_detail)
-                : status == STATUS_ACTIVE ? getString(R.string.status_active_detail, versionName())
-                : getString(stale ? R.string.status_stale_detail
-                        : status == STATUS_MISSING ? R.string.status_missing_detail
-                        : R.string.status_inactive_detail));
-        statusCard.setEnabled(!checkingNow);
-        statusCard.setContentDescription(statusTitle.getText() + "。" + statusDetail.getText()
-                + (checkingNow ? "" : "。" + getString(R.string.status_recheck)));
+        segments(statusGroup);
     }
 
     private void renderExport() {
-        exportButton.setEnabled(!exportJob.running);
-        exportButton.setIconResource(exportJob.failed ? R.drawable.ic_refresh : R.drawable.ic_export);
-        exportButton.setText(exportJob.running ? R.string.export_running
-                : exportJob.failed ? R.string.export_retry : R.string.export_action);
+        for (int i = 0; i < exportButtons.length; i++) {
+            NotesApp app = NotesApp.ALL[i];
+            MaterialButton button = exportButtons[i];
+            boolean mine = exportJob.app == app;
+            boolean failedHere = exportJob.failed && mine && !exportJob.running;
+            button.setVisibility(rows[i].installed ? View.VISIBLE : View.GONE);
+            button.setEnabled(!exportJob.running);
+            button.setIconResource(failedHere ? R.drawable.ic_refresh : R.drawable.ic_export);
+            button.setText(exportJob.running && mine ? R.string.export_running
+                    : failedHere ? (app == NotesApp.PAPER ? R.string.export_retry_paper : R.string.export_retry_notes)
+                    : app == NotesApp.PAPER ? R.string.export_action_paper : R.string.export_action_notes);
+        }
         exportProgress.setVisibility(exportJob.running ? View.VISIBLE : View.GONE);
         exportStatus.setVisibility(exportJob.message.isEmpty() ? View.GONE : View.VISIBLE);
         exportStatus.setText(exportJob.message);
@@ -370,21 +370,32 @@ public final class ConfigActivity extends Activity {
                 .putInt(ConfigContract.KEY_SELECTED_MODE, mode);
         if (!watermark.isEmpty()) edit.putString(ConfigContract.KEY_LAST_CUSTOM_TEXT, watermark);
         edit.apply();
+        publish();
         push();
     }
 
-    /** Hands the saved settings to the Notes process; a changed answer updates the status quietly. */
+    /** The framework keeps the settings where every hooked process can read them, awake or not. */
+    private void publish() {
+        final String text = prefs.getString(ConfigContract.KEY_WATERMARK_TEXT, "");
+        final boolean keepBlank = prefs.getBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, true);
+        BRIDGE.execute(() -> Remote.publishSettings(text, keepBlank));
+    }
+
+    /** Hands the saved settings to each app's process; a changed answer updates the status quietly. */
     private void push() {
         final Context context = getApplicationContext();
-        BRIDGE.execute(() -> {
-            final int result = NotesBridge.sync(context);
-            main.post(() -> {
-                if (checking || isFinishing() || isDestroyed() || status == result) return;
-                status = result;
-                animate();
-                renderStatus();
+        for (final StatusRow row : rows) {
+            if (!row.installed) continue;
+            BRIDGE.execute(() -> {
+                final int result = NotesBridge.resolve(context, row.app);
+                main.post(() -> {
+                    if (row.checking || isFinishing() || isDestroyed() || row.status == result) return;
+                    row.status = result;
+                    animate();
+                    renderStatus();
+                });
             });
-        });
+        }
     }
 
     /** Nothing off-screen needs to animate, and a transition cut short by a stop would
@@ -401,7 +412,12 @@ public final class ConfigActivity extends Activity {
 
     @Override protected void onRestart() {
         super.onRestart();
-        if (status != STATUS_ACTIVE) checkModule();
+        for (StatusRow row : rows) {
+            if (row.installed && row.status != STATUS_ACTIVE && row.status != STATUS_IDLE) {
+                checkModule();
+                return;
+            }
+        }
     }
 
     @Override protected void onResume() {
@@ -422,6 +438,7 @@ public final class ConfigActivity extends Activity {
         out.putString("exportMessage", exportJob.message);
         out.putBoolean("exportRunning", exportJob.running);
         out.putBoolean("exportFailed", exportJob.failed);
+        out.putString("exportApp", exportJob.app == null ? "" : exportJob.app.pkg);
         super.onSaveInstanceState(out);
     }
 
@@ -429,6 +446,7 @@ public final class ConfigActivity extends Activity {
 
     @Override protected void onDestroy() {
         main.removeCallbacks(persist);
+        Remote.unlisten(remoteListener);
         if (exportJob.activity.get() == this) exportJob.activity.clear();
         super.onDestroy();
     }
@@ -436,40 +454,140 @@ public final class ConfigActivity extends Activity {
     // ------------------------------------------------------------ module status
 
     /**
-     * Asks the injected code, inside the Notes process, to identify itself, and hands it
-     * the settings on the way. A missing answer means the module is installed but not
-     * actually hooking anything.
+     * One notes app's row: asks the injected code, inside that app's process, to identify
+     * itself, and hands it the settings on the way. A missing answer means the module is
+     * installed but not actually hooking anything.
      */
+    private final class StatusRow {
+        final NotesApp app;
+        final View item;
+        final ListItemCardView card;
+        final LinearLayout text;
+        final LoadingIndicator loading;
+        final ImageView icon, action;
+        final TextView title, detail;
+        final boolean installed;
+        int status = STATUS_CHECKING;
+        boolean checking;
+
+        StatusRow(NotesApp app, View item) {
+            this.app = app;
+            this.item = item;
+            card = item.findViewById(R.id.statusCard);
+            text = item.findViewById(R.id.statusText);
+            loading = item.findViewById(R.id.statusLoading);
+            icon = item.findViewById(R.id.statusIcon);
+            action = item.findViewById(R.id.statusAction);
+            title = item.findViewById(R.id.statusTitle);
+            detail = item.findViewById(R.id.statusDetail);
+            installed = NotesBridge.installed(ConfigActivity.this, app);
+            if (!installed) status = STATUS_MISSING;
+        }
+
+        String name() {
+            return getString(app == NotesApp.PAPER ? R.string.app_paper : R.string.app_notes);
+        }
+
+        /**
+         * A module that works needs no container: a glyph and a line of text, level with
+         * everything else on the page. Only a module that is not working gets a filled
+         * surface and a second line saying what to do about it.
+         */
+        void render() {
+            boolean checkingNow = status == STATUS_CHECKING;
+            boolean good = status == STATUS_ACTIVE || status == STATUS_IDLE;
+            boolean quiet = checkingNow || good;
+            // Worth a look but not broken: an old build waiting for a restart, a scope to add.
+            boolean stale = status == STATUS_STALE || status == STATUS_SCOPE;
+            int surface = quiet ? ui.card : stale ? ui.tertiaryContainer : ui.errorContainer;
+            int onSurface = quiet ? ui.ink : stale ? ui.onTertiaryContainer : ui.onErrorContainer;
+            int onSurfaceVariant = quiet ? ui.muted : onSurface;
+            card.setCardBackgroundColor(surface);
+            title.setTextColor(onSurface);
+            detail.setTextColor(onSurfaceVariant);
+            action.setImageTintList(ColorStateList.valueOf(onSurfaceVariant));
+
+            loading.setVisibility(checkingNow ? View.VISIBLE : View.GONE);
+            icon.setVisibility(checkingNow ? View.GONE : View.VISIBLE);
+            action.setVisibility(checkingNow ? View.INVISIBLE : View.VISIBLE);
+            if (!checkingNow) {
+                boolean active = good;
+                icon.setBackground(ui.badge(active ? MaterialShapes.COOKIE_9 : MaterialShapes.SUNNY,
+                        active ? ui.primaryContainer : stale ? ui.tertiary : ui.error));
+                icon.setImageResource(active ? R.drawable.ic_status_active
+                        : status == STATUS_STALE ? R.drawable.ic_refresh : R.drawable.ic_status_alert);
+                icon.setImageTintList(ColorStateList.valueOf(
+                        active ? ui.onPrimaryContainer : stale ? ui.onTertiary : ui.onError));
+            }
+
+            String name = name();
+            title.setText(checkingNow ? getString(R.string.status_checking, name)
+                    : status == STATUS_ACTIVE ? getString(R.string.status_active, name)
+                    : status == STATUS_IDLE ? getString(R.string.status_idle, name)
+                    : status == STATUS_SCOPE ? getString(R.string.status_scope, name)
+                    : stale ? getString(R.string.status_stale, name)
+                    : status == STATUS_MISSING ? getString(R.string.status_missing)
+                    : getString(R.string.status_inactive, name));
+            detail.setText(checkingNow ? getString(R.string.status_checking_detail, name)
+                    : status == STATUS_ACTIVE ? getString(R.string.status_active_detail, name, versionName())
+                    : status == STATUS_IDLE ? getString(R.string.status_idle_detail, name)
+                    : status == STATUS_SCOPE ? getString(R.string.status_scope_detail)
+                    : stale ? getString(R.string.status_stale_detail, name)
+                    : status == STATUS_MISSING ? getString(R.string.status_missing_detail)
+                    : getString(R.string.status_inactive_detail, name));
+            card.setEnabled(!checkingNow && installed);
+            card.setContentDescription(title.getText() + "。" + detail.getText()
+                    + (checkingNow || !installed || status == STATUS_SCOPE ? ""
+                            : "。" + getString(R.string.status_recheck)));
+        }
+    }
+
     private void checkModule() {
-        if (checking) return;
-        checking = true;
-        status = STATUS_CHECKING;
+        for (StatusRow row : rows) {
+            if (row.installed) check(row);
+        }
+    }
+
+    private void check(final StatusRow row) {
+        if (row.checking || !row.installed) return;
+        row.checking = true;
+        row.status = STATUS_CHECKING;
         renderStatus();
         final Context context = getApplicationContext();
         BRIDGE.execute(() -> {
-            final int result = NotesBridge.sync(context);
+            final int result = NotesBridge.resolve(context, row.app);
             main.post(() -> {
-                checking = false;
+                row.checking = false;
                 if (isFinishing() || isDestroyed()) return;
-                status = result;
+                row.status = result;
                 animate();
                 renderStatus();
             });
         });
     }
 
+    /** The framework asks the user itself; whatever the answer, look again afterwards. */
+    private void requestScope(final StatusRow row) {
+        BRIDGE.execute(() -> Remote.requestScope(java.util.Collections.singletonList(row.app.pkg),
+                () -> main.post(() -> {
+                    if (!isFinishing() && !isDestroyed()) check(row);
+                })));
+    }
+
     // ------------------------------------------------------------------ export
 
-    private void startExport() {
+    private void startExport(NotesApp app) {
         if (exportJob.running) return;
         exportJob.running = true;
         exportJob.failed = false;
-        exportJob.message = getString(R.string.export_working);
+        exportJob.app = app;
+        exportJob.message = getString(R.string.export_working,
+                getString(app == NotesApp.PAPER ? R.string.app_paper : R.string.app_notes));
         animate();
         renderExport();
         final ExportJob job = exportJob;
         new Thread(() -> {
-            String result = job.exportThroughNotes();
+            String result = job.exportThrough(app);
             main.post(() -> {
                 job.message = result;
                 job.running = false;
@@ -487,11 +605,14 @@ public final class ConfigActivity extends Activity {
         final Context context;
         WeakReference<ConfigActivity> activity = new WeakReference<>(null);
         boolean running, failed;
+        NotesApp app;
         String message = "";
         ExportJob(Context context) { this.context = context; }
 
-        String exportThroughNotes() {
-            try (Cursor cursor = context.getContentResolver().query(ConfigContract.EXPORT_URI, null, null, null, null)) {
+        String exportThrough(NotesApp target) {
+            String name = context.getString(
+                    target == NotesApp.PAPER ? R.string.app_paper : R.string.app_notes);
+            try (Cursor cursor = context.getContentResolver().query(target.exportUri(), null, null, null, null)) {
                 if (cursor != null && cursor.moveToFirst()) {
                     int column = cursor.getColumnIndex(ConfigContract.COLUMN_EXPORT_MESSAGE);
                     if (column >= 0 && !cursor.isNull(column)) {
@@ -501,20 +622,28 @@ public final class ConfigActivity extends Activity {
                     }
                 }
             } catch (Exception ignored) { /* The hook may need a cold start. */ }
-            Intent intent = context.getPackageManager().getLaunchIntentForPackage(ConfigContract.NOTE_PKG);
+            Intent intent = context.getPackageManager().getLaunchIntentForPackage(target.pkg);
             if (intent == null) {
                 failed = true;
-                return context.getString(R.string.export_missing_notes);
+                return context.getString(R.string.export_missing, name);
             }
+            long now = System.currentTimeMillis();
             context.getSharedPreferences(ConfigContract.PREFS, 0).edit()
-                    .putLong(ConfigContract.KEY_EXPORT_REQUEST, System.currentTimeMillis()).apply();
+                    .putLong(ConfigContract.KEY_EXPORT_REQUEST, now)
+                    .putString(ConfigContract.KEY_EXPORT_TARGET, target.pkg).apply();
+            // The framework carries it too: the app cannot start this module's provider to ask.
+            Remote.publishExportRequest(target, now);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try { context.startActivity(intent); }
+            // From the screen when it is still there, so the app opens next to it (on the
+            // same display) rather than wherever the system defaults to.
+            ConfigActivity screen = activity.get();
+            Context starter = screen != null && !screen.isFinishing() ? screen : context;
+            try { starter.startActivity(intent); }
             catch (Exception ignored) {
                 failed = true;
-                return context.getString(R.string.export_cannot_open);
+                return context.getString(R.string.export_cannot_open, name);
             }
-            return context.getString(R.string.export_requested);
+            return context.getString(R.string.export_requested, name);
         }
     }
 

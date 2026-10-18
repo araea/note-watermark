@@ -4,9 +4,10 @@
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
 
-    <!-- The settings screen reaches the Notes app to trigger an export. -->
+    <!-- The settings screen reaches the notes apps to check the hook and trigger an export. -->
     <queries>
         <package android:name="com.coloros.note" />
+        <package android:name="com.oplus.aipaper" />
     </queries>
 
     <!--

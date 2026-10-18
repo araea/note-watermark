@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One notes app's module state: quiet when it works, loud with a next step when it does not. -->
+<com.google.android.material.listitem.ListItemLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <com.google.android.material.listitem.ListItemCardView
+        android:id="@+id/statusCard"
+        style="@style/Widget.Sujian.Segment"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clickable="true"
+        android:focusable="true">
+
+        <LinearLayout style="@style/Widget.Sujian.SegmentRow">
+
+            <FrameLayout
+                android:layout_width="@dimen/list_leading"
+                android:layout_height="@dimen/list_leading"
+                android:importantForAccessibility="noHideDescendants">
+
+                <!-- An M3E shape carries the state glyph; its outline differs per state. -->
+                <ImageView
+                    android:id="@+id/statusIcon"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:padding="@dimen/space_sm"
+                    android:visibility="gone" />
+
+                <com.google.android.material.loadingindicator.LoadingIndicator
+                    android:id="@+id/statusLoading"
+                    style="@style/Widget.Sujian.Loading"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:id="@+id/statusText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="@dimen/space_lg"
+                android:layout_weight="1"
+                android:duplicateParentState="true"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/statusTitle"
+                    style="@style/Widget.Sujian.Label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    android:id="@+id/statusDetail"
+                    style="@style/Widget.Sujian.Supporting"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/statusAction"
+                style="@style/Widget.Material3.ImageView.ListItem.TrailingIcon"
+                android:layout_width="@dimen/list_leading_glyph"
+                android:layout_height="@dimen/list_leading_glyph"
+                android:layout_marginLeft="@dimen/space_lg"
+                android:src="@drawable/ic_refresh" />
+        </LinearLayout>
+    </com.google.android.material.listitem.ListItemCardView>
+</com.google.android.material.listitem.ListItemLayout>

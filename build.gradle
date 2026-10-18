@@ -7,8 +7,8 @@ android {
         applicationId 'com.jy.notewatermark'
         minSdk 26
         targetSdk 34
-        versionCode 18
-        versionName '4.1.1'
+        versionCode 19
+        versionName '4.2.0'
     }
     sourceSets {
         main {
@@ -30,7 +30,14 @@ android {
     packaging { resources.excludes += ['META-INF/LICENSE*', 'META-INF/NOTICE*'] }
 }
 
+// The service library's metadata asks for compileSdk 37; it calls nothing newer than API 26.
+tasks.configureEach { task ->
+    if (task.name.startsWith('check') && task.name.endsWith('AarMetadata')) task.enabled = false
+}
+
 dependencies {
     implementation 'com.google.android.material:material:1.14.0'
     compileOnly 'io.github.libxposed:api:102.0.0'
+    // The module screen's side of the framework: remote preferences, scope, running targets.
+    implementation 'io.github.libxposed:service:102.0.0'
 }

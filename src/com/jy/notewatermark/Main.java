@@ -25,8 +25,11 @@ import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface;
 
 /**
- * Removes (or replaces) the "ColorOS 便签" watermark that the ColorOS Notes app
- * stamps at the bottom of a note when it is shared as a picture.
+ * Removes (or replaces) the "ColorOS 便签" / "笔记" watermark that the ColorOS notes
+ * apps stamp at the bottom of a note when it is shared as a picture. Two apps are
+ * covered: 「便签」 (com.coloros.note) and the AI notes app that arrived with ColorOS 17,
+ * 「笔记」 (com.oplus.aipaper), which reuses the same share screen next to a web-based one
+ * (see {@link PaperShare}).
  *
  * The watermark lives inside the layout color_os_logo.xml, which is inflated by
  * com.nearme.note.activity.edit.SaveImageAndShare:
@@ -52,8 +55,9 @@ import io.github.libxposed.api.XposedModuleInterface;
  * and the old watermark.txt files the last.
  *
  * The same injection also carries the one-tap note export: the module UI cannot
- * read the Notes database, but code running inside the Notes process can, so the
- * export is triggered from here and written by {@link NoteExporter}.
+ * read either app's database, but code running inside the app's process can, so the
+ * export is triggered from here and written by {@link NoteExporter} (便签) or
+ * {@link PaperExporter} (笔记).
  *
  * Built against the modern libxposed API 102: the entry class extends
  * {@link XposedModule}, hooks are interceptor chains, and no
@@ -63,10 +67,6 @@ import io.github.libxposed.api.XposedModuleInterface;
 public class Main extends XposedModule {
 
     private static final String TAG = "NoteWatermark";
-    private static final String TARGET_PKG = "com.coloros.note";
-    /** Exported, permission-free provider of the Notes app; see AndroidManifest. */
-    private static final String BACKUP_PROVIDER =
-            "com.oplus.migrate.backuprestore.NoteBackupRestoreProvider";
     private static final String MODULE_PKG = "com.jy.notewatermark";
 
     private static final String[] CONFIG_PATHS = {
@@ -81,6 +81,9 @@ public class Main extends XposedModule {
      * attached the interface in {@link #onModuleLoaded}.
      */
     private static volatile Main sInstance;
+    /** The hosting app's Application, once it exists; a context for hooks that are not handed one. */
+    private static volatile Application sApp;
+    private static volatile SharedPreferences sRemote;
 
     @Override
     public void onModuleLoaded(XposedModuleInterface.ModuleLoadedParam param) {
@@ -89,17 +92,21 @@ public class Main extends XposedModule {
 
     @Override
     public void onPackageReady(XposedModuleInterface.PackageReadyParam param) {
-        if (!TARGET_PKG.equals(param.getPackageName())) {
+        NotesApp app = NotesApp.forPackage(param.getPackageName());
+        if (app == null) {
             return;
         }
-        installHooks(param.getClassLoader());
+        installHooks(app, param.getClassLoader());
     }
 
-    private void installHooks(ClassLoader classLoader) {
-        // The export/status bridge must work even if a newer Notes build moves the
+    private void installHooks(NotesApp app, ClassLoader classLoader) {
+        // The export/status bridge must work even if a newer build moves the
         // share screen and no watermark hooks can be installed.
-        hookModuleBridge(classLoader);
+        hookModuleBridge(app, classLoader);
         hookPendingExport();
+        if (app == NotesApp.PAPER) {
+            PaperShare.install(this, classLoader);
+        }
         ShareAdapt.Target target = ShareAdapt.discover(classLoader);
         if (target == null) {
             log("share screen not found; export and status remain available");
@@ -146,16 +153,16 @@ public class Main extends XposedModule {
 
     /**
      * The module settings screen talks to the injected code by querying made-up
-     * paths on the Notes app's own exported provider. Answering them here means the
+     * paths on the app's own exported provider. Answering them here means the
      * work runs in the process that can read the notes, and that a query also starts
-     * the Notes process when it is not running.
+     * the app's process when it is not running.
      *
      * Two paths are served: an export request, and a status probe that reports which
      * build of the hook is actually loaded in this process.
      */
-    private void hookModuleBridge(ClassLoader classLoader) {
+    private void hookModuleBridge(final NotesApp app, ClassLoader classLoader) {
         try {
-            Method query = classLoader.loadClass(BACKUP_PROVIDER).getDeclaredMethod(
+            Method query = classLoader.loadClass(app.bridgeClass).getDeclaredMethod(
                     "query", Uri.class, String[].class, String.class, String[].class, String.class);
             hook(query).setId("moduleBridge").intercept(new XposedInterface.Hooker() {
                 @Override
@@ -170,10 +177,10 @@ public class Main extends XposedModule {
                         return chain.proceed();
                     }
                     Context context = ((ContentProvider) chain.getThisObject()).getContext();
-                    return exportCursor(context);
+                    return exportCursor(app, context);
                 }
             });
-            log("hooked " + BACKUP_PROVIDER + ".query()");
+            log("hooked " + app.bridgeClass + ".query()");
         } catch (Throwable t) {
             log("could not hook the module bridge: " + t);
         }
@@ -199,10 +206,10 @@ public class Main extends XposedModule {
             log("ignored settings from another app");
             return;
         }
-        storeSettings(context, new Config(clean(text), !"0".equals(keepBlank)));
+        storeSettings(context, new FooterConfig(clean(text), !"0".equals(keepBlank)));
     }
 
-    private static void storeSettings(Context context, Config config) {
+    private static void storeSettings(Context context, FooterConfig config) {
         try {
             settings(context).edit()
                     .putBoolean(ConfigContract.KEY_SYNCED, true)
@@ -230,17 +237,21 @@ public class Main extends XposedModule {
                 ? line.substring(0, ConfigContract.WATERMARK_MAX_LENGTH).trim() : line;
     }
 
-    private static MatrixCursor exportCursor(Context context) {
-        NoteExporter.Result result;
+    private static MatrixCursor exportCursor(NotesApp app, Context context) {
+        ExportKit.Result result;
         if (context == null || !callerAllowed(context)) {
-            result = new NoteExporter.Result(false, "导出失败：调用方不是本模块", "");
+            result = new ExportKit.Result(false, "导出失败：调用方不是本模块", "");
         } else {
-            result = NoteExporter.export(context);
+            result = exportFrom(app, context);
         }
         log("export: " + result.message);
         MatrixCursor cursor = new MatrixCursor(ConfigContract.EXPORT_COLUMNS);
         cursor.addRow(new Object[] { result.ok ? 1 : 0, result.message, result.path });
         return cursor;
+    }
+
+    private static ExportKit.Result exportFrom(NotesApp app, Context context) {
+        return app == NotesApp.PAPER ? PaperExporter.export(context) : NoteExporter.export(context);
     }
 
     /**
@@ -270,7 +281,7 @@ public class Main extends XposedModule {
 
     /**
      * Fallback path: when the settings screen cannot reach the provider it leaves
-     * a request behind and opens the Notes app instead, so the export happens the
+     * a request behind and opens the notes app instead, so the export happens the
      * next time this process starts.
      */
     private void hookPendingExport() {
@@ -283,8 +294,10 @@ public class Main extends XposedModule {
                         public Object intercept(XposedInterface.Chain chain) throws Throwable {
                             Object result = chain.proceed();
                             Application app = (Application) chain.getArg(0);
-                            if (app != null && TARGET_PKG.equals(app.getPackageName())) {
-                                runPendingExport(app);
+                            NotesApp host = app == null ? null : NotesApp.forPackage(app.getPackageName());
+                            if (host != null) {
+                                sApp = app;
+                                runPendingExport(app, host);
                             }
                             return result;
                         }
@@ -295,11 +308,11 @@ public class Main extends XposedModule {
     }
 
     /** Off the main thread: nothing here may slow down starting the Notes app. */
-    private static void runPendingExport(final Context context) {
+    private static void runPendingExport(final Context context, final NotesApp app) {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                long request = readExportRequest(context);
+                long request = readExportRequest(context, app);
                 if (request <= 0) {
                     return;
                 }
@@ -311,19 +324,32 @@ public class Main extends XposedModule {
                 // Claim it first: a crash mid-export must not loop on every start.
                 prefs.edit().putLong(ConfigContract.KEY_EXPORT_HANDLED, request).apply();
 
-                NoteExporter.Result result = NoteExporter.export(context);
+                ExportKit.Result result = exportFrom(app, context);
                 log("pending export: " + result.message);
                 toast(context, result.message);
             }
         }, "note-watermark-export").start();
     }
 
-    private static long readExportRequest(Context context) {
+    /** The pending request's time, or 0 when there is none or it was left for the other app. */
+    private static long readExportRequest(Context context, NotesApp app) {
+        SharedPreferences remote = remote();
+        if (remote != null && remote.contains(ConfigContract.KEY_EXPORT_REQUEST)) {
+            String wanted = remote.getString(ConfigContract.KEY_EXPORT_TARGET, NotesApp.NOTES.pkg);
+            return app.pkg.equals(wanted) ? remote.getLong(ConfigContract.KEY_EXPORT_REQUEST, 0L) : 0L;
+        }
         Cursor cursor = null;
         try {
             cursor = context.getContentResolver().query(
                     ConfigContract.URI, null, null, null, null);
             if (cursor != null && cursor.moveToFirst()) {
+                int target = cursor.getColumnIndex(ConfigContract.COLUMN_EXPORT_TARGET);
+                // A module from before 4.2 only ever meant the 便签 app.
+                String wanted = target >= 0 && !cursor.isNull(target)
+                        ? cursor.getString(target) : NotesApp.NOTES.pkg;
+                if (!app.pkg.equals(wanted)) {
+                    return 0L;
+                }
                 int column = cursor.getColumnIndex(ConfigContract.COLUMN_EXPORT_REQUEST);
                 return column >= 0 ? cursor.getLong(column) : 0L;
             }
@@ -360,7 +386,17 @@ public class Main extends XposedModule {
     }
 
     private static void apply(Object activity, String from) {
-        Config config = readConfig(activity);
+        if (ShareAdapt.paintsOwnFooter(activity)) {
+            // The page carries its own footer (see PaperShare); the app's legacy footer under
+            // it is a preview leftover that was never part of the picture.
+            ShareAdapt.Views leftover = ShareAdapt.resolve(activity);
+            setVisibility(leftover.row, 8);
+            setVisibility(leftover.watermark, 8);
+            setVisibility(leftover.share, 8);
+            setVisibility(leftover.original, 8);
+            return;
+        }
+        FooterConfig config = readConfig(activity);
         String custom = config.watermarkText;
 
         ShareAdapt.Views views = ShareAdapt.resolve(activity);
@@ -407,13 +443,37 @@ public class Main extends XposedModule {
         }
     }
 
-    private static Config readConfig(Object activity) {
+    /**
+     * The framework's copy of the module's settings, which the settings screen keeps current
+     * whether or not this app was running at the time. Null where there is none.
+     */
+    private static SharedPreferences remote() {
+        SharedPreferences kept = sRemote;
+        if (kept != null) return kept;
+        Main instance = sInstance;
+        if (instance == null) return null;
+        try {
+            return sRemote = instance.getRemotePreferences(ConfigContract.REMOTE_GROUP);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    static FooterConfig readConfig(Object activity) {
+        SharedPreferences remote = remote();
+        if (remote != null && remote.contains(ConfigContract.KEY_WATERMARK_TEXT)) {
+            return new FooterConfig(clean(remote.getString(ConfigContract.KEY_WATERMARK_TEXT, "")),
+                    remote.getBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, true));
+        }
+        if (activity == null) {
+            activity = sApp;
+        }
         if (activity instanceof Context) {
             Context context = (Context) activity;
             try {
                 SharedPreferences kept = settings(context);
                 if (kept.getBoolean(ConfigContract.KEY_SYNCED, false)) {
-                    return new Config(
+                    return new FooterConfig(
                             clean(kept.getString(ConfigContract.KEY_WATERMARK_TEXT, "")),
                             kept.getBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, true));
                 }
@@ -431,7 +491,7 @@ public class Main extends XposedModule {
                             ConfigContract.COLUMN_KEEP_BLANK_SPACE);
                     String text = textColumn >= 0 ? cursor.getString(textColumn) : "";
                     boolean keepSpace = spaceColumn < 0 || cursor.getInt(spaceColumn) != 0;
-                    Config config = new Config(text == null ? "" : clean(text), keepSpace);
+                    FooterConfig config = new FooterConfig(text == null ? "" : clean(text), keepSpace);
                     storeSettings(context, config);
                     return config;
                 }
@@ -447,7 +507,7 @@ public class Main extends XposedModule {
 
         // Compatibility fallback for old installs and frameworks that block the
         // exported settings provider.
-        return new Config(readLegacyCustomText(), true);
+        return new FooterConfig(readLegacyCustomText(), true);
     }
 
     private static String readLegacyCustomText() {
@@ -484,16 +544,6 @@ public class Main extends XposedModule {
         return "";
     }
 
-    private static final class Config {
-        final String watermarkText;
-        final boolean keepBlankSpace;
-
-        Config(String watermarkText, boolean keepBlankSpace) {
-            this.watermarkText = watermarkText;
-            this.keepBlankSpace = keepBlankSpace;
-        }
-    }
-
     private static void setVisibility(Object view, int visibility) {
         if (view == null) {
             return;
@@ -514,7 +564,7 @@ public class Main extends XposedModule {
     }
 
     /** Logs through the framework once it is attached, to logcat before that. */
-    private static void log(String message) {
+    static void log(String message) {
         Main instance = sInstance;
         if (instance != null) {
             try {

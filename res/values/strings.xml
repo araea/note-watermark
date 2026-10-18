@@ -1,21 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">素笺</string>
-    <string name="app_description">素笺：ColorOS 便签去水印、自定义水印与便签导出。</string>
-    <string name="app_subtitle">ColorOS 便签</string>
+    <string name="app_description">素笺：ColorOS 便签与笔记的去水印、自定义水印与导出。</string>
+    <string name="app_subtitle">ColorOS 便签 · 笔记</string>
     <string name="version_footer">素笺 %1$s</string>
 
-    <!-- Module state, checked through the hook itself. -->
-    <string name="status_checking">正在确认模块状态</string>
-    <string name="status_active">模块已生效</string>
-    <string name="status_stale">便签仍在运行旧版模块</string>
-    <string name="status_stale_detail">重新启动 ColorOS 便签，这个版本才会接管分享长图。</string>
-    <string name="status_inactive">模块尚未生效</string>
-    <string name="status_inactive_detail">在框架中启用「素笺」，再冷启动 ColorOS 便签。作用域已固定，无需手动添加。</string>
-    <string name="status_missing">未找到 ColorOS 便签</string>
-    <string name="status_missing_detail">本模块只作用于 ColorOS 自带的便签应用。</string>
-    <string name="status_active_detail">便签中运行的是 %1$s 版</string>
-    <string name="status_checking_detail">正在询问 ColorOS 便签</string>
+    <!-- The two apps this module works on. -->
+    <string name="app_paper">笔记</string>
+    <string name="app_notes">便签</string>
+
+    <!-- Module state, checked through the hook itself; %1$s is the app's name. -->
+    <string name="status_checking">正在确认「%1$s」</string>
+    <string name="status_active">「%1$s」模块已生效</string>
+    <string name="status_stale">「%1$s」仍在运行旧版模块</string>
+    <string name="status_stale_detail">重新启动 ColorOS %1$s，这个版本才会接管分享长图。</string>
+    <string name="status_inactive">「%1$s」模块尚未生效</string>
+    <string name="status_inactive_detail">在框架中启用「素笺」，再冷启动 ColorOS %1$s。</string>
+    <string name="status_idle">「%1$s」已就绪</string>
+    <string name="status_idle_detail">模块已启用，下次启动 ColorOS %1$s 时自动生效。</string>
+    <string name="status_scope">「%1$s」未加入作用域</string>
+    <string name="status_scope_detail">点按向框架申请加入；若弹出提示，选择允许即可。</string>
+    <string name="status_ask_scope">点按可申请作用域</string>
+    <string name="status_missing">未找到 ColorOS 笔记或便签</string>
+    <string name="status_missing_detail">本模块只作用于 ColorOS 自带的笔记和便签应用。</string>
+    <string name="status_active_detail">%1$s中运行的是 %2$s 版</string>
+    <string name="status_checking_detail">正在询问 ColorOS %1$s</string>
     <string name="status_recheck">点按可重新检查</string>
 
     <!-- The one thing this module changes. -->
@@ -31,21 +40,24 @@
     <string name="watermark_hint">水印文字</string>
     <string name="preview_sample_title">今天的灵感</string>
     <string name="preview_sample_body">一些想法，一点日常。每一次记录，都保留本来的样子。</string>
-    <string name="preview_sample_watermark">ColorOS 便签</string>
-    <string name="preview_note">示意效果，以便签实际分享为准。</string>
-    <string name="apply_hint">改动即时保存，重新打开便签的分享页后生效。</string>
+    <string name="preview_sample_watermark_paper">ColorOS 笔记</string>
+    <string name="preview_sample_watermark_notes">ColorOS 便签</string>
+    <string name="preview_note">示意效果，以实际分享为准。</string>
+    <string name="apply_hint">改动即时保存，重新打开分享页后生效。</string>
 
     <!-- Backup -->
-    <string name="export_section">导出便签</string>
+    <string name="export_section">导出</string>
     <string name="export_title">整理为 ZIP</string>
-    <string name="export_body">按分类保存到系统「下载」文件夹，包含文本、HTML 与附件</string>
-    <string name="export_privacy">加密便签会自动跳过</string>
-    <string name="export_action">导出全部便签</string>
+    <string name="export_body">按笔记库、分类保存到系统「下载」文件夹，包含文本、HTML 与附件</string>
+    <string name="export_privacy">加密内容会自动跳过</string>
+    <string name="export_action_paper">导出全部笔记</string>
+    <string name="export_action_notes">导出全部便签</string>
     <string name="export_running">正在导出…</string>
-    <string name="export_retry">重试导出</string>
-    <string name="export_working">正在整理便签与附件，请稍候…</string>
+    <string name="export_retry_paper">重试导出笔记</string>
+    <string name="export_retry_notes">重试导出便签</string>
+    <string name="export_working">正在整理「%1$s」与附件，请稍候…</string>
     <string name="export_interrupted">上次导出的状态已中断，请先检查「下载」文件夹，必要时重新导出。</string>
-    <string name="export_missing_notes">未找到 ColorOS 便签，请先安装便签应用。</string>
-    <string name="export_cannot_open">无法打开便签。请手动打开便签，并确认模块已启用。</string>
-    <string name="export_requested">已请求导出。请留意便签内的完成提示；若无响应，请确认模块已启用并重新启动便签。</string>
+    <string name="export_missing">未找到 ColorOS %1$s，请先安装。</string>
+    <string name="export_cannot_open">无法打开 ColorOS %1$s。请手动打开，并确认模块已启用。</string>
+    <string name="export_requested">已请求导出。请留意 ColorOS %1$s 内的完成提示；若无响应，请确认模块已启用并重新启动它。</string>
 </resources>

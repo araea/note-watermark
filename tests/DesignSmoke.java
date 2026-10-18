@@ -23,17 +23,24 @@ import java.util.Map;
 /** Device UI regression checks; never exports the real Notes database. */
 public final class DesignSmoke extends Instrumentation {
     private static final int MODE_HIDDEN = 0, MODE_BLANK = 1, MODE_CUSTOM = 2;
-    private static final int STATUS_ACTIVE = 1, STATUS_INACTIVE = 3;
+    private static final int STATUS_ACTIVE = 1, STATUS_INACTIVE = 3, STATUS_IDLE = 5, STATUS_SCOPE = 6;
 
     private boolean dark;
     private float fontScale = 1f;
     private int density;
     private Activity activity;
+    private int displayId = -1;
     private SharedPreferences preferences;
     private Map<String, ?> original;
     private final StringBuilder report = new StringBuilder();
 
-    @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); start(); }
+    @Override public void onCreate(Bundle arguments) {
+        super.onCreate(arguments);
+        // `am instrument -e display N` runs the screens on another display, e.g. a virtual one.
+        String display = arguments == null ? null : arguments.getString("display");
+        if (display != null) displayId = Integer.parseInt(display);
+        start();
+    }
 
     @Override public Activity newActivity(ClassLoader loader, String name, Intent intent)
             throws InstantiationException, IllegalAccessException, ClassNotFoundException {
@@ -51,6 +58,7 @@ public final class DesignSmoke extends Instrumentation {
         try {
             checkShareAdapt();
             checkExportLinks();
+            checkPaperShare();
             preferences = getTargetContext().getSharedPreferences("settings", 0);
             original = preferences.getAll();
             preferences.edit().remove("watermark_text").remove("keep_blank_space")
@@ -142,18 +150,23 @@ public final class DesignSmoke extends Instrumentation {
             removeMonitor(monitor);
             waitForIdleSync();
             runOnMainSync(() -> {
-                check(!view("exportButton").isEnabled(),
-                        "an in-flight export stays disabled after recreation");
+                for (View button : exportButtons())
+                    check(!button.isEnabled(), "an in-flight export stays disabled after recreation");
                 check(view("exportProgress").getVisibility() == View.VISIBLE,
                         "export progress survives recreation");
                 Object job = field(activity, "exportJob");
                 set(job, "running", false);
                 set(job, "failed", true);
+                set(job, "app", app("NOTES"));
                 set(job, "message", "测试错误：请重试");
                 invoke(activity, "renderExport");
-                check(text("exportButton").getText().toString().equals("重试导出"), "a failure offers a retry");
-                check(view("exportButton").isEnabled(), "the retry is reachable");
+                check(((TextView) exportButton(1)).getText().toString().equals("重试导出便签"),
+                        "a failure offers a retry on the app that failed");
+                check(((TextView) exportButton(0)).getText().toString().equals("导出全部笔记"),
+                        "the other app's button is left as it was");
+                check(exportButton(1).isEnabled(), "the retry is reachable");
                 set(job, "failed", false);
+                set(job, "app", null);
                 set(job, "message", "");
                 invoke(activity, "renderExport");
                 check(view("exportStatus").getVisibility() == View.GONE, "an empty export state is hidden");
@@ -218,6 +231,12 @@ public final class DesignSmoke extends Instrumentation {
             launch();
             capture("light-inactive", STATUS_INACTIVE);
             close();
+            launch();
+            capture("light-idle", STATUS_IDLE);
+            capture("light-scope", STATUS_SCOPE);
+            runOnMainSync(() -> check(((TextView) field(((Object[]) field(activity, "rows"))[0], "title"))
+                    .getText().toString().contains("作用域"), "the scope row says what is missing"));
+            close();
             dark = true;
             launch();
             capture("dark", STATUS_ACTIVE);
@@ -252,7 +271,9 @@ public final class DesignSmoke extends Instrumentation {
     private void launch() {
         Intent intent = new Intent().setClassName(getTargetContext(), "com.jy.notewatermark.ConfigActivity");
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        activity = startActivitySync(intent);
+        activity = displayId < 0 ? startActivitySync(intent)
+                : startActivitySync(intent, android.app.ActivityOptions.makeBasic()
+                        .setLaunchDisplayId(displayId).toBundle());
         waitForIdleSync();
     }
 
@@ -274,10 +295,15 @@ public final class DesignSmoke extends Instrumentation {
         try {
             Class<?> bridge = Class.forName("com.jy.notewatermark.NotesBridge", true,
                     getTargetContext().getClassLoader());
-            java.lang.reflect.Method sync = bridge.getDeclaredMethod("sync", android.content.Context.class);
+            Class<?> apps = Class.forName("com.jy.notewatermark.NotesApp", true,
+                    getTargetContext().getClassLoader());
+            java.lang.reflect.Method sync = bridge.getDeclaredMethod("sync", android.content.Context.class, apps);
             sync.setAccessible(true);
-            report.append("  restored settings synced to Notes: ")
-                    .append(sync.invoke(null, getTargetContext())).append('\n');
+            java.lang.reflect.Field all = apps.getDeclaredField("ALL");
+            all.setAccessible(true);
+            for (Object app : (Object[]) all.get(null))
+                report.append("  restored settings synced to ").append(((String) field(app, "pkg")))
+                        .append(": ").append(sync.invoke(null, getTargetContext(), app)).append('\n');
         } catch (Exception error) {
             throw new RuntimeException(error);
         }
@@ -298,16 +324,23 @@ public final class DesignSmoke extends Instrumentation {
             View content = view("content");
             check(content.getWidth() > 0 && content.getHeight() > 0, "measured " + name);
             Object ui = field(activity, "ui");
-            int card = ((android.content.res.ColorStateList) invokeResult(view("statusCard"),
-                    "getCardBackgroundColor")).getDefaultColor();
-            if (status == STATUS_ACTIVE) {
-                check(card == (Integer) field(ui, "card"), "a working module sits on the plain list surface");
-            } else {
-                check(card == (Integer) field(ui, "errorContainer"),
-                        "a module that is not working turns its item into an error container");
+            for (Object row : rows()) {
+                if (!(Boolean) field(row, "installed")) continue;
+                int card = ((android.content.res.ColorStateList) invokeResult(field(row, "card"),
+                        "getCardBackgroundColor")).getDefaultColor();
+                if (status == STATUS_ACTIVE || status == STATUS_IDLE) {
+                    check(card == (Integer) field(ui, "card"), "a working module sits on the plain list surface");
+                } else if (status == STATUS_SCOPE) {
+                    check(card == (Integer) field(ui, "tertiaryContainer"),
+                            "a missing scope is flagged without the weight of an error");
+                } else {
+                    check(card == (Integer) field(ui, "errorContainer"),
+                            "a module that is not working turns its item into an error container");
+                }
+                check(((View) field(row, "detail")).getVisibility() == View.VISIBLE, "the status says what it means");
+                check(((View) field(row, "loading")).getVisibility() == View.GONE, "a settled status stops loading");
+                check(((View) field(row, "card")).getHeight() >= dp(48), "status refresh target >= 48dp");
             }
-            check(view("statusDetail").getVisibility() == View.VISIBLE, "the status says what it means");
-            check(view("statusLoading").getVisibility() == View.GONE, "a settled status stops loading");
             View viewport = activity.getWindow().getDecorView();
             write(name, viewport, (Integer) field(ui, "page"));
             write(name + "-page", scroll.getChildAt(0), (Integer) field(ui, "page"));
@@ -324,8 +357,8 @@ public final class DesignSmoke extends Instrumentation {
             checkContrast(ui, "onTertiaryContainer", "tertiaryContainer");
             checkContrast(ui, "onError", "error");
             checkContrast(ui, "onErrorContainer", "errorContainer");
-            check(view("statusCard").getHeight() >= dp(48), "status refresh target >= 48dp");
-            check(view("exportButton").getHeight() >= dp(48), "export target >= 48dp");
+            for (View button : exportButtons())
+                check(button.getHeight() >= dp(48), "export target >= 48dp");
             for (int i = 0; i < 3; i++)
                 check(button(i).getHeight() >= dp(48), "mode target >= 48dp");
         });
@@ -345,8 +378,10 @@ public final class DesignSmoke extends Instrumentation {
 
     private void pin(int status) {
         runOnMainSync(() -> {
-            set(activity, "checking", true);
-            set(activity, "status", status);
+            for (Object row : rows()) {
+                set(row, "checking", true);
+                set(row, "status", (Boolean) field(row, "installed") ? status : 4);
+            }
             invoke(activity, "renderStatus");
         });
     }
@@ -419,6 +454,23 @@ public final class DesignSmoke extends Instrumentation {
     }
 
     private View view(String name) { return (View) field(activity, name); }
+    private Object[] rows() { return (Object[]) field(activity, "rows"); }
+    private View exportButton(int index) { return (View) Array.get(field(activity, "exportButtons"), index); }
+    private View[] exportButtons() {
+        Object[] buttons = (Object[]) field(activity, "exportButtons");
+        java.util.List<View> shown = new java.util.ArrayList<>();
+        for (Object button : buttons) if (((View) button).getVisibility() == View.VISIBLE) shown.add((View) button);
+        check(!shown.isEmpty(), "an export button is shown for an installed app");
+        return shown.toArray(new View[0]);
+    }
+    private Object app(String name) {
+        try {
+            java.lang.reflect.Field field = Class.forName("com.jy.notewatermark.NotesApp", true,
+                    getTargetContext().getClassLoader()).getDeclaredField(name);
+            field.setAccessible(true);
+            return field.get(null);
+        } catch (Exception error) { throw new RuntimeException(error); }
+    }
     private TextView text(String name) { return (TextView) view(name); }
     private EditText edit() { return (EditText) view("watermarkInput"); }
     private int mode() { return (Integer) field(activity, "mode"); }
@@ -486,6 +538,42 @@ public final class DesignSmoke extends Instrumentation {
         row.setAccessible(true);
         check(row.get(views) == fixture.mLogoLinearLayout,
                 "reflection still resolves the verified share footer");
+    }
+
+    /** The newer app's share surfaces: which style leaves the legacy footer alone, and what the page is told. */
+    private void checkPaperShare() throws Exception {
+        ClassLoader loader = getTargetContext().getClassLoader();
+        Class<?> adapt = Class.forName("com.jy.notewatermark.ShareAdapt", true, loader);
+        java.lang.reflect.Method own = adapt.getDeclaredMethod("paintsOwnFooter", Object.class);
+        own.setAccessible(true);
+        SimpleFixture simple = new SimpleFixture();
+        check((Boolean) own.invoke(null, simple), "the simple style is recognized as painting its own footer");
+        simple.mCurrentShareStyle = Style.CLASSIC;
+        check(!(Boolean) own.invoke(null, simple), "the other styles keep using the legacy footer");
+        check(!(Boolean) own.invoke(null, new ShareFixture()), "the older app has no such style");
+        check(!(Boolean) own.invoke(null, (Object) null), "nothing is not a style");
+
+        Class<?> config = Class.forName("com.jy.notewatermark.FooterConfig", true, loader);
+        java.lang.reflect.Constructor<?> make = config.getDeclaredConstructor(String.class, boolean.class);
+        make.setAccessible(true);
+        Class<?> paper = Class.forName("com.jy.notewatermark.PaperShare", true, loader);
+        java.lang.reflect.Method script = paper.getDeclaredMethod("script", config);
+        script.setAccessible(true);
+        String hidden = (String) script.invoke(null, make.newInstance("", false));
+        String blank = (String) script.invoke(null, make.newInstance("", true));
+        String custom = (String) script.invoke(null, make.newInstance("a\"</script>'b", true));
+        check(hidden.contains("mode:\"hidden\"") && blank.contains("mode:\"blank\"")
+                && custom.contains("mode:\"custom\""), "the page is told which of the three outcomes to show");
+        check(custom.contains("a\\\"<\\/script>'b"), "a custom line is escaped into the script, not spliced");
+        check(hidden.contains("--share-watermark-height:0px"), "hiding also gives back the room the footer reserved");
+        check(blank.contains("visibility:hidden") && !blank.contains("--share-watermark-height:0px"),
+                "blank keeps the room");
+    }
+
+    public enum Style { SIMPLE, CLASSIC }
+
+    public static final class SimpleFixture {
+        Style mCurrentShareStyle = Style.SIMPLE;
     }
 
     public static final class ShareFixture {

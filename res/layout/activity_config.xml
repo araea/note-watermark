@@ -4,11 +4,12 @@
     settings use: grouped items on a surfaceContainer page, 2dp seams inside a group,
     a small primary header above each group.
 
-    Status  - a single item: the module either works (quiet) or says what to do (loud).
+    Status  - one item per installed notes app: the module either works (quiet) or says
+              what to do (loud).
     Share   - preview first, then the three outcomes as a radio list, then the text
               field when the custom line is chosen. The preview sits right above the
               control that changes it.
-    Export  - a single item carrying the one filled button on the screen.
+    Export  - a single item: one filled button for the newer app, a tonal one for the other.
 -->
 <androidx.coordinatorlayout.widget.CoordinatorLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -71,73 +72,26 @@
                 android:paddingBottom="@dimen/space_section">
 
                 <!-- ============================================================ status -->
-                <com.google.android.material.listitem.ListItemLayout
-                    android:id="@+id/statusItem"
+                <LinearLayout
+                    android:id="@+id/statusGroup"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
+                    android:layout_height="wrap_content"
+                    android:divider="@drawable/segment_gap"
+                    android:orientation="vertical"
+                    android:showDividers="middle">
 
-                    <com.google.android.material.listitem.ListItemCardView
-                        android:id="@+id/statusCard"
-                        style="@style/Widget.Sujian.Segment"
+                    <include
+                        android:id="@+id/statusPaper"
+                        layout="@layout/item_status"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:clickable="true"
-                        android:focusable="true">
+                        android:layout_height="wrap_content" />
 
-                        <LinearLayout style="@style/Widget.Sujian.SegmentRow">
-
-                            <FrameLayout
-                                android:layout_width="@dimen/list_leading"
-                                android:layout_height="@dimen/list_leading"
-                                android:importantForAccessibility="noHideDescendants">
-
-                                <!-- An M3E shape carries the state glyph; its outline differs per state. -->
-                                <ImageView
-                                    android:id="@+id/statusIcon"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="match_parent"
-                                    android:padding="@dimen/space_sm"
-                                    android:visibility="gone" />
-
-                                <com.google.android.material.loadingindicator.LoadingIndicator
-                                    android:id="@+id/statusLoading"
-                                    style="@style/Widget.Sujian.Loading"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="match_parent" />
-                            </FrameLayout>
-
-                            <LinearLayout
-                                android:id="@+id/statusText"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginLeft="@dimen/space_lg"
-                                android:layout_weight="1"
-                                android:duplicateParentState="true"
-                                android:orientation="vertical">
-
-                                <TextView
-                                    android:id="@+id/statusTitle"
-                                    style="@style/Widget.Sujian.Label"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content" />
-
-                                <TextView
-                                    android:id="@+id/statusDetail"
-                                    style="@style/Widget.Sujian.Supporting"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content" />
-                            </LinearLayout>
-
-                            <ImageView
-                                android:id="@+id/statusAction"
-                                style="@style/Widget.Material3.ImageView.ListItem.TrailingIcon"
-                                android:layout_width="@dimen/list_leading_glyph"
-                                android:layout_height="@dimen/list_leading_glyph"
-                                android:layout_marginLeft="@dimen/space_lg"
-                                android:src="@drawable/ic_refresh" />
-                        </LinearLayout>
-                    </com.google.android.material.listitem.ListItemCardView>
-                </com.google.android.material.listitem.ListItemLayout>
+                    <include
+                        android:id="@+id/statusNotes"
+                        layout="@layout/item_status"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
 
                 <!-- ============================================================= share -->
                 <TextView
@@ -481,12 +435,21 @@
                             </LinearLayout>
 
                             <com.google.android.material.button.MaterialButton
-                                android:id="@+id/exportButton"
+                                android:id="@+id/exportPaper"
                                 style="@style/Widget.Sujian.Export"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="@dimen/space_lg"
-                                android:text="@string/export_action"
+                                android:text="@string/export_action_paper"
+                                app:icon="@drawable/ic_export" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/exportNotes"
+                                style="@style/Widget.Sujian.Export.Tonal"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="@dimen/space_sm"
+                                android:text="@string/export_action_notes"
                                 app:icon="@drawable/ic_export" />
 
                             <com.google.android.material.progressindicator.LinearProgressIndicator

@@ -27,11 +27,13 @@ public final class ConfigProvider extends ContentProvider {
                 ConfigContract.COLUMN_WATERMARK_TEXT,
                 ConfigContract.COLUMN_KEEP_BLANK_SPACE,
                 ConfigContract.COLUMN_EXPORT_REQUEST,
+                ConfigContract.COLUMN_EXPORT_TARGET,
         });
         cursor.addRow(new Object[] {
                 prefs.getString(ConfigContract.KEY_WATERMARK_TEXT, ""),
                 prefs.getBoolean(ConfigContract.KEY_KEEP_BLANK_SPACE, true) ? 1 : 0,
                 prefs.getLong(ConfigContract.KEY_EXPORT_REQUEST, 0L),
+                prefs.getString(ConfigContract.KEY_EXPORT_TARGET, NotesApp.NOTES.pkg),
         });
         return cursor;
     }

@@ -132,6 +132,25 @@ final class ShareAdapt {
         return null;
     }
 
+    /**
+     * The newer notes app (「笔记」) has a "simple" share style that paints each page, footer
+     * included, into its own bitmap; the footer views below it are not part of the picture
+     * and the app leaves them hidden. Touching them would only show a footer the picture
+     * does not have, so that style is left to {@link PaperShare}.
+     */
+    static boolean paintsOwnFooter(Object owner) {
+        if (owner == null) return false;
+        try {
+            Field f = fieldDef(owner.getClass(), "mCurrentShareStyle");
+            if (f == null) return false;
+            f.setAccessible(true);
+            Object style = f.get(owner);
+            return style instanceof Enum && "SIMPLE".equals(((Enum<?>) style).name());
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     /** Resolve only inside the share footer; never match an unrelated note or toolbar. */
     static final class Views {
         View row, line, watermark, share, original;

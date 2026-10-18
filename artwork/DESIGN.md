@@ -10,15 +10,15 @@ M3E 分段列表（Android 16 设置页的写法）：`surfaceContainer` 页面�
 
 | 组 | 组件 | 说明 |
 | --- | --- | --- |
-| 状态 | `ListItemLayout` + `ListItemCardView`，前导 `LoadingIndicator` / `MaterialShapes` 徽记 | 生效时是普通列表项；旧版未重启用 tertiaryContainer，未生效或缺便签用 errorContainer。点按重查，尾部刷新图标提示可点 |
+| 状态 | 每个已安装的应用一个 `ListItemLayout` + `ListItemCardView`（`item_status.xml`），前导 `LoadingIndicator` / `MaterialShapes` 徽记 | 生效或就绪时是普通列表项；旧版未重启、未加入作用域用 tertiaryContainer，未生效或两个应用都没装用 errorContainer。点按重查（缺作用域时点按即申请），尾部刷新图标提示可点 |
 | 分享长图底部 | 预览项 → 三个单选项 → 自定义时的输入项 | 选中项取列表的 selected 令牌（secondaryContainer），形状变为整圆角；自定义输入出现时，组内首 / 中 / 尾形状随之重排 |
-| 导出便签 | 单个列表项，内含全页唯一的 filled 按钮 | 进行中显示 wavy 线性进度；失败时按钮变为「重试导出」，说明放在 errorContainer 中 |
+| 导出 | 单个列表项，每个已安装的应用一个按钮：笔记 filled、便签 tonal | 进行中显示 wavy 线性进度，其余按钮置灰；失败时出错的那个按钮变为「重试导出…」，说明放在 errorContainer 中 |
 
 ## 令牌
 
 | 系统 | 唯一来源 | 使用 |
 | --- | --- | --- |
-| 色彩 | `res/values*/colors.xml`、`AppTheme`；Android 12+ 动态色覆盖 | 页面 surfaceContainer，列表项 surfaceBright（深浅色下都比页面亮一级），预览纸页 surfaceContainerHigh；primary 只用于组标题与导出按钮 |
+| 色彩 | `res/values*/colors.xml`、`AppTheme`；Android 12+ 动态色覆盖 | 页面 surfaceContainer，列表项 surfaceBright（深浅色下都比页面亮一级），预览纸页 surfaceContainerHigh；primary 只用于组标题与首个导出按钮 |
 | 字体 | MDC 列表项文字样式 + `Text.Sujian.*` | 列表项标签 bodyLarge、辅助文字 bodyMedium、概述 labelSmall；组标题 titleSmall Emphasized；全部随系统字号缩放 |
 | 形状 | MDC 列表项形状状态表；`Shape.Sujian.*` 取自 M3 圆角刻度 | 列表首 / 中 / 尾 / 单项与选中形状由 MDC 给出；预览纸页 Large，错误说明 Medium；状态徽记 Cookie 9（正常）/ Sunny（异常） |
 | 间距与尺寸 | `res/values/dimens.xml` | 页边 16dp、组内缝隙 2dp、8 / 12 / 16 / 24 / 32dp 间距；可操作元素不小于 48dp；正文最大宽度 680dp |
