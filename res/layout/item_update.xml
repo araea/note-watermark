@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    A new version, only while there is one: what it is, what it brings, one button that
+    carries it from download to the system installer. Sits above everything else, since
+    it is the one thing on the page that asks for a decision.
+-->
+<com.google.android.material.listitem.ListItemLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <com.google.android.material.listitem.ListItemCardView
+        android:id="@+id/updateCard"
+        style="@style/Widget.Sujian.Segment"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:contentPaddingBottom="@dimen/space_md"
+        app:contentPaddingTop="@dimen/space_lg">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:id="@+id/updateHeader"
+                style="@style/Widget.Sujian.SegmentRow"
+                android:gravity="top">
+
+                <ImageView
+                    android:id="@+id/updateIcon"
+                    android:layout_width="@dimen/list_leading"
+                    android:layout_height="@dimen/list_leading"
+                    android:importantForAccessibility="no"
+                    android:padding="@dimen/space_sm"
+                    android:src="@drawable/ic_download" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="@dimen/space_lg"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/updateTitle"
+                        style="@style/Widget.Sujian.Label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <TextView
+                        android:id="@+id/updateDetail"
+                        style="@style/Widget.Sujian.Supporting"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <TextView
+                        android:id="@+id/updateMeta"
+                        style="@style/Text.Sujian.Caption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_xs" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/updateProgress"
+                style="@style/Widget.Material3Expressive.LinearProgressIndicator.Wavy"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_md"
+                android:importantForAccessibility="no"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/updateStatus"
+                style="@style/Text.Sujian.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_md"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_sm"
+                android:gravity="end|center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/updateNotes"
+                    style="@style/Widget.Sujian.Update.Text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/update_notes" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/updateAction"
+                    style="@style/Widget.Sujian.Update"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="@dimen/space_sm"
+                    android:text="@string/update_now" />
+            </LinearLayout>
+        </LinearLayout>
+    </com.google.android.material.listitem.ListItemCardView>
+</com.google.android.material.listitem.ListItemLayout>

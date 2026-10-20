@@ -1,16 +1,31 @@
 package com.jy.notewatermark;
 
+import android.Manifest;
 import android.app.Activity;
+import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
+import android.text.Html;
 import android.text.InputFilter;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
 import android.text.TextWatcher;
+import android.text.format.Formatter;
+import android.text.method.LinkMovementMethod;
+import android.text.style.BulletSpan;
+import android.text.style.RelativeSizeSpan;
+import android.text.style.StyleSpan;
+import android.text.style.TextAppearanceSpan;
+import android.util.TypedValue;
 import android.content.res.ColorStateList;
 import android.view.View;
 import android.view.ViewGroup;
@@ -20,17 +35,26 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import androidx.core.graphics.ColorUtils;
 import androidx.core.widget.NestedScrollView;
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.color.DynamicColors;
 import com.google.android.material.listitem.ListItemCardView;
 import com.google.android.material.listitem.ListItemLayout;
 import com.google.android.material.loadingindicator.LoadingIndicator;
+import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.shape.MaterialShapes;
+import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import java.lang.ref.WeakReference;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -43,8 +67,19 @@ import java.util.concurrent.Executors;
  * they are made, so there is no draft state, no save bar and no "are you sure" on
  * the way out. The setting is shared by both apps (「笔记」 and 「便签」); each gets its
  * own status line and its own export button, for the ones that are installed.
+ *
+ * Updates stay out of the way until there is one: then a card above everything says what
+ * it brings, and one button carries it from download to the system installer.
  */
 public final class ConfigActivity extends Activity {
+    /** Set by the update notification's button: start updating as soon as the screen is up. */
+    static final String EXTRA_UPDATE = "update";
+    private static final String MARKET_PAGE = "https://modules.lsposed.org/module/com.jy.notewatermark/";
+    /** Screens started and not yet stopped; the daily job keeps quiet while one is on show. */
+    private static int started;
+
+    static boolean visible() { return started > 0; }
+
     /** The three states {@link Main} can put the share footer in. */
     private static final int MODE_HIDDEN = 0, MODE_BLANK = 1, MODE_CUSTOM = 2;
 
@@ -68,7 +103,7 @@ public final class ConfigActivity extends Activity {
     private ChoiceItem[] modeItems;
     private ImageView exportPrivacyIcon;
     private TextView previewLabel, sampleTitle, sampleBody, previewWatermark,
-            exportStatus, exportPrivacy, versionLabel;
+            exportStatus, exportPrivacy;
     private View previewDivider, inputItem;
     private TextInputLayout inputLayout;
     private TextInputEditText watermarkInput;
@@ -76,6 +111,23 @@ public final class ConfigActivity extends Activity {
     private LinearProgressIndicator exportProgress;
     /** One per app, in {@link NotesApp#ALL} order; only the installed ones are shown. */
     private StatusRow[] rows;
+
+    private Updater updater;
+    private Updater.State update;
+    private View updateItem;
+    private LinearLayout updateGroup;
+    private ListItemCardView updateCard, versionCard;
+    private SwitchItem autoCard;
+    private MaterialSwitch autoSwitch;
+    private ImageView updateIcon, versionIcon;
+    private LoadingIndicator versionLoading;
+    private TextView updateTitle, updateDetail, updateMeta, updateStatus, versionTitle, versionDetail, autoDetail;
+    private LinearProgressIndicator updateProgress;
+    private MaterialButton updateAction, updateNotes;
+    private BottomSheetDialog sheet;
+    /** The confirmation screen already started, so a repeated snapshot does not open it twice. */
+    private Intent confirmShown;
+    private final Updater.Listener updateListener = this::updated;
 
     private boolean resumed;
     private int mode = MODE_BLANK;
@@ -95,6 +147,8 @@ public final class ConfigActivity extends Activity {
         ui = new MaterialStyle(this);
         ui.applyWindow();
         prefs = getSharedPreferences(ConfigContract.PREFS, 0);
+        updater = Updater.get(this);
+        update = updater.state();
         Remote.listen(remoteListener);
         Remote.init();
         setContentView(R.layout.activity_config);
@@ -150,14 +204,45 @@ public final class ConfigActivity extends Activity {
             final NotesApp app = NotesApp.ALL[i];
             exportButtons[i].setOnClickListener(v -> startExport(app));
         }
+        versionCard.setOnClickListener(v -> updater.check(true));
+        autoCard.setOnClickListener(v -> {
+            updater.setAuto(!updater.auto());
+            updater.check(false);
+            renderUpdate();
+        });
+        updateAction.setOnClickListener(v -> act());
+        updateNotes.setOnClickListener(v -> showNotes());
 
         render();
         renderExport();
         renderStatus();
+        renderUpdate();
         segments(shareGroup);
         segments(statusGroup);
+        segments(updateGroup);
         checkModule();
         if (state != null) scroll.post(() -> scroll.scrollTo(0, state.getInt("scroll")));
+
+        updater.listen(updateListener);
+        UpdateJob.schedule(this, updater.auto());
+        // The screen says it all from here; the notification has done its job.
+        UpdateJob.clear(this);
+        updater.check(false);
+        if (state == null) follow(getIntent());
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        follow(intent);
+    }
+
+    /** The notification's 「立即更新」: the user has already decided. */
+    private void follow(Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(EXTRA_UPDATE, false)) return;
+        intent.removeExtra(EXTRA_UPDATE);
+        UpdateJob.clear(this);
+        updater.update();
     }
 
     private void bind() {
@@ -190,7 +275,25 @@ public final class ConfigActivity extends Activity {
         exportStatus = findViewById(R.id.exportStatus);
         exportPrivacy = findViewById(R.id.exportPrivacy);
         exportPrivacyIcon = findViewById(R.id.exportPrivacyIcon);
-        versionLabel = findViewById(R.id.versionLabel);
+        updateItem = findViewById(R.id.updateItem);
+        updateCard = findViewById(R.id.updateCard);
+        updateIcon = findViewById(R.id.updateIcon);
+        updateTitle = findViewById(R.id.updateTitle);
+        updateDetail = findViewById(R.id.updateDetail);
+        updateMeta = findViewById(R.id.updateMeta);
+        updateProgress = findViewById(R.id.updateProgress);
+        updateStatus = findViewById(R.id.updateStatus);
+        updateAction = findViewById(R.id.updateAction);
+        updateNotes = findViewById(R.id.updateNotes);
+        updateGroup = findViewById(R.id.updateGroup);
+        versionCard = findViewById(R.id.versionCard);
+        versionIcon = findViewById(R.id.versionIcon);
+        versionLoading = findViewById(R.id.versionLoading);
+        versionTitle = findViewById(R.id.versionTitle);
+        versionDetail = findViewById(R.id.versionDetail);
+        autoCard = findViewById(R.id.autoCard);
+        autoSwitch = findViewById(R.id.autoSwitch);
+        autoDetail = findViewById(R.id.autoDetail);
     }
 
     /** Everything a token cannot express in XML: tinted shapes, limits, accessibility roles. */
@@ -199,9 +302,25 @@ public final class ConfigActivity extends Activity {
         previewDivider.setBackgroundColor(ui.outline);
         exportPrivacyIcon.setImageTintList(ColorStateList.valueOf(ui.muted));
         watermarkInput.setFilters(new InputFilter[] { new InputFilter.LengthFilter(80) });
-        versionLabel.setText(getString(R.string.version_footer, versionName()));
         heading(findViewById(R.id.shareSection));
         heading(findViewById(R.id.exportSection));
+        heading(findViewById(R.id.updateSection));
+        // The card is a banner, not a list: its own surface, the badge and button carry the accent.
+        updateCard.setCardBackgroundColor(ui.primaryContainer);
+        updateIcon.setBackground(ui.badge(MaterialShapes.SOFT_BURST, ui.primary));
+        updateIcon.setImageTintList(ColorStateList.valueOf(ui.onPrimary));
+        for (TextView text : new TextView[] { updateTitle, updateDetail, updateMeta }) {
+            text.setTextColor(ui.onPrimaryContainer);
+        }
+        updateNotes.setTextColor(ui.onPrimaryContainer);
+        updateProgress.setIndicatorColor(ui.primary);
+        updateProgress.setTrackColor(ColorUtils.setAlphaComponent(ui.onPrimaryContainer, 0x24));
+        versionTitle.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        ((View) versionTitle.getParent()).setImportantForAccessibility(
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        versionCard.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        ((View) autoDetail.getParent()).setImportantForAccessibility(
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         ((ListItemLayout) findViewById(R.id.exportItem)).updateAppearance(0, 1);
 
         // The preview is one summary node; its sample text is not read out line by line.
@@ -410,6 +529,16 @@ public final class ConfigActivity extends Activity {
         if (keyboard != null) keyboard.hideSoftInputFromWindow(watermarkInput.getWindowToken(), 0);
     }
 
+    @Override protected void onStart() {
+        super.onStart();
+        started++;
+    }
+
+    @Override protected void onStop() {
+        started--;
+        super.onStop();
+    }
+
     @Override protected void onRestart() {
         super.onRestart();
         for (StatusRow row : rows) {
@@ -423,6 +552,11 @@ public final class ConfigActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         resumed = true;
+        // Back from the install permission page, or from the notification settings.
+        updater.resume();
+        renderUpdate();
+        showConfirm();
+        seen();
     }
 
     @Override protected void onPause() {
@@ -447,6 +581,8 @@ public final class ConfigActivity extends Activity {
     @Override protected void onDestroy() {
         main.removeCallbacks(persist);
         Remote.unlisten(remoteListener);
+        updater.unlisten(updateListener);
+        if (sheet != null) sheet.dismiss();
         if (exportJob.activity.get() == this) exportJob.activity.clear();
         super.onDestroy();
     }
@@ -572,6 +708,262 @@ public final class ConfigActivity extends Activity {
                 () -> main.post(() -> {
                     if (!isFinishing() && !isDestroyed()) check(row);
                 })));
+    }
+
+    // ------------------------------------------------------------------ update
+
+    private void updated(Updater.State state) {
+        if (isFinishing() || isDestroyed()) return;
+        Updater.State before = update;
+        update = state;
+        if (state.phase != Updater.INSTALLING) confirmShown = null;
+        // Progress ticks only move the bar; the layout moves when the situation changes.
+        if (before.phase != state.phase || before.newer != state.newer || before.checking != state.checking
+                || !before.failure.equals(state.failure) || !before.note.equals(state.note)) {
+            animate();
+        }
+        renderUpdate();
+        showConfirm();
+        showJust();
+        seen();
+        if (state.newer && !before.newer) askNotifications();
+    }
+
+    /** A version the user has seen here needs no notification later. */
+    private void seen() {
+        if (resumed && update.newer) updater.markNotified(update.release.tag);
+    }
+
+    /** Said once, by whichever copy of the screen is up after the update. */
+    private void showJust() {
+        String just = updater.takeJust();
+        if (just.isEmpty()) return;
+        UpdateJob.clear(this);
+        scroll.post(() -> Snackbar.make(findViewById(R.id.root), getString(R.string.update_done, just),
+                Snackbar.LENGTH_LONG).show());
+    }
+
+    /** The one button does whatever the update needs next. */
+    private void act() {
+        switch (update.phase) {
+            case Updater.DOWNLOADING:
+                updater.cancel();
+                break;
+            case Updater.PERMISSION:
+                Intent allow = updater.permissionIntent();
+                if (allow == null) { updater.resume(); break; }
+                try { startActivity(allow); }
+                catch (RuntimeException missing) { updater.update(); }
+                break;
+            default:
+                confirmShown = null;
+                updater.update();
+        }
+    }
+
+    /** The system's 「install this update?」, shown from here so it opens over this screen. */
+    private void showConfirm() {
+        Intent confirm = update.confirm;
+        if (!resumed || confirm == null || confirm == confirmShown) return;
+        confirmShown = confirm;
+        updater.confirmShown();
+        try { startActivity(confirm); }
+        catch (RuntimeException gone) { updater.status(android.content.pm.PackageInstaller.STATUS_FAILURE, null, null); }
+    }
+
+    /** Asked once, at the moment there is something worth being told about. */
+    private void askNotifications() {
+        if (Build.VERSION.SDK_INT < 33 || !resumed || !updater.askNotifications()) return;
+        updater.markAsked();
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, 1);
+        }
+    }
+
+    @Override public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(code, permissions, results);
+        renderUpdate();
+    }
+
+    private void renderUpdate() {
+        Updater.State state = update;
+        boolean card = state.release != null && (state.newer || state.phase != Updater.IDLE);
+        updateItem.setVisibility(card ? View.VISIBLE : View.GONE);
+        if (card) renderCard(state);
+        renderVersion(state);
+        boolean on = updater.auto();
+        autoSwitch.setChecked(on);
+        autoCard.setOn(on);
+        autoDetail.setText(!on ? R.string.auto_off : notifying() ? R.string.auto_on : R.string.auto_on_silent);
+        autoCard.setContentDescription(getString(R.string.auto_title) + "。" + autoDetail.getText());
+    }
+
+    /** Whether a new version will actually reach the user as a notification. */
+    private boolean notifying() {
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        if (manager != null && manager.areNotificationsEnabled()) return true;
+        // Not asked yet: it will be, as soon as there is something to tell.
+        return Build.VERSION.SDK_INT >= 33 && updater.askNotifications();
+    }
+
+    private void renderCard(Updater.State state) {
+        Release release = state.release;
+        updateTitle.setText(getString(R.string.update_available, release.version));
+        String summary = release.summary();
+        updateDetail.setVisibility(summary.isEmpty() ? View.GONE : View.VISIBLE);
+        updateDetail.setText(summary);
+        updateMeta.setText(meta(release));
+
+        boolean downloading = state.phase == Updater.DOWNLOADING;
+        updateProgress.setVisibility(downloading ? View.VISIBLE : View.GONE);
+        if (downloading) {
+            updateProgress.setProgressCompat(state.total > 0 ? (int) (state.done * 100 / state.total) : 0, true);
+        }
+        boolean failed = state.phase == Updater.IDLE && !state.failure.isEmpty();
+        String status = downloading ? getString(R.string.update_downloading, size(state.done), size(state.total))
+                : state.phase == Updater.PERMISSION ? getString(R.string.update_permission)
+                : state.phase == Updater.INSTALLING
+                        ? getString(state.confirm == null && confirmShown == null
+                                ? R.string.update_installing : R.string.update_confirm)
+                : failed ? state.failure : state.note;
+        updateStatus.setVisibility(status.isEmpty() ? View.GONE : View.VISIBLE);
+        updateStatus.setText(status);
+        updateStatus.setTextColor(failed ? ui.onErrorContainer : ui.onPrimaryContainer);
+        updateStatus.setBackground(failed ? ui.shape(ui.errorContainer, R.style.Shape_Sujian_Notice) : null);
+        int padding = failed ? ui.dimen(R.dimen.space_md) : 0;
+        updateStatus.setPadding(padding, padding, padding, padding);
+        // Read out when the situation changes, not on every tick of the download.
+        updateStatus.setAccessibilityLiveRegion(downloading ? View.ACCESSIBILITY_LIVE_REGION_NONE
+                : View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        updateProgress.setContentDescription(status);
+
+        updateAction.setText(downloading ? R.string.update_cancel
+                : state.phase == Updater.PERMISSION ? R.string.update_allow
+                : state.phase == Updater.INSTALLING ? R.string.update_continue
+                : failed ? R.string.update_retry : R.string.update_now);
+        updateNotes.setVisibility(release.notes.isEmpty() ? View.GONE : View.VISIBLE);
+    }
+
+    private void renderVersion(Updater.State state) {
+        versionTitle.setText(getString(R.string.version_title, versionName()));
+        versionLoading.setVisibility(state.checking ? View.VISIBLE : View.GONE);
+        versionIcon.setVisibility(state.checking ? View.INVISIBLE : View.VISIBLE);
+        boolean latest = !state.newer && state.checkError.isEmpty() && state.checkedAt > 0;
+        if (state.newer) {
+            versionIcon.setBackground(ui.badge(MaterialShapes.SOFT_BURST, ui.primary));
+            versionIcon.setImageResource(R.drawable.ic_download);
+            versionIcon.setImageTintList(ColorStateList.valueOf(ui.onPrimary));
+        } else {
+            versionIcon.setBackground(ui.badge(MaterialShapes.COOKIE_9,
+                    latest ? ui.primaryContainer : ui.secondaryContainer));
+            versionIcon.setImageResource(latest ? R.drawable.ic_status_active : R.drawable.ic_refresh);
+            versionIcon.setImageTintList(ColorStateList.valueOf(
+                    latest ? ui.onPrimaryContainer : ui.onSecondaryContainer));
+        }
+        versionDetail.setText(state.checking ? getString(R.string.version_checking)
+                : state.newer ? getString(R.string.version_newer, state.release.version)
+                : !state.checkError.isEmpty() ? getString(R.string.version_failed, state.checkError)
+                : state.checkedAt > 0 ? getString(R.string.version_latest, checked(state.checkedAt))
+                : getString(R.string.version_unchecked));
+        versionCard.setEnabled(!state.checking);
+        versionCard.setContentDescription(versionTitle.getText() + "。" + versionDetail.getText()
+                + (state.checking ? "" : "。" + getString(R.string.status_recheck)));
+    }
+
+    private String size(long bytes) { return Formatter.formatShortFileSize(this, bytes); }
+
+    /** 「5.3 MB · 10 月 20 日发布」 */
+    private String meta(Release release) {
+        return release.published <= 0 ? size(release.size)
+                : getString(R.string.update_meta, size(release.size), day(release.published));
+    }
+
+    private String day(long time) {
+        Calendar then = Calendar.getInstance();
+        then.setTimeInMillis(time);
+        boolean thisYear = then.get(Calendar.YEAR) == Calendar.getInstance().get(Calendar.YEAR);
+        return new SimpleDateFormat(getString(thisYear ? R.string.date_this_year : R.string.date_other_year),
+                Locale.CHINA).format(new Date(time));
+    }
+
+    /** 「刚刚检查」「12 分钟前检查」「今天 09:30 检查」「10 月 18 日检查」 */
+    private String checked(long time) {
+        long ago = System.currentTimeMillis() - time;
+        if (ago < 60_000L) return getString(R.string.checked_now);
+        if (ago < 3_600_000L) return getString(R.string.checked_minutes, (int) (ago / 60_000L));
+        Calendar then = Calendar.getInstance();
+        then.setTimeInMillis(time);
+        Calendar now = Calendar.getInstance();
+        if (then.get(Calendar.YEAR) == now.get(Calendar.YEAR)
+                && then.get(Calendar.DAY_OF_YEAR) == now.get(Calendar.DAY_OF_YEAR)) {
+            return getString(R.string.checked_today,
+                    new SimpleDateFormat("HH:mm", Locale.CHINA).format(new Date(time)));
+        }
+        return getString(R.string.checked_day, day(time));
+    }
+
+    /** The release notes in a sheet: read them, then update from right there. */
+    private void showNotes() {
+        Release release = update.release;
+        if (release == null || (sheet != null && sheet.isShowing())) return;
+        BottomSheetDialog dialog = new BottomSheetDialog(this);
+        View view = getLayoutInflater().inflate(R.layout.sheet_release, null);
+        ((TextView) view.findViewById(R.id.sheetTitle)).setText(getString(R.string.sheet_title, release.version));
+        ((TextView) view.findViewById(R.id.sheetMeta)).setText(meta(release));
+        TextView notes = view.findViewById(R.id.sheetNotes);
+        CharSequence body = notes(release.body());
+        notes.setText(body.length() == 0 ? getString(R.string.sheet_empty) : body);
+        notes.setMovementMethod(LinkMovementMethod.getInstance());
+        view.findViewById(R.id.sheetPage).setOnClickListener(v -> {
+            try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(MARKET_PAGE))); }
+            catch (RuntimeException noBrowser) { /* Nothing to open it with. */ }
+        });
+        View go = view.findViewById(R.id.sheetUpdate);
+        go.setVisibility(update.newer && update.phase == Updater.IDLE ? View.VISIBLE : View.GONE);
+        go.setOnClickListener(v -> {
+            dialog.dismiss();
+            act();
+        });
+        dialog.setContentView(view);
+        // Long notes scroll inside the sheet, so the actions under them stay in reach.
+        NestedScrollView notesScroll = view.findViewById(R.id.sheetScroll);
+        int limit = Math.round(getResources().getDisplayMetrics().heightPixels * 0.55f);
+        notesScroll.measure(View.MeasureSpec.makeMeasureSpec(getResources().getDisplayMetrics().widthPixels,
+                View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        if (notesScroll.getMeasuredHeight() > limit) notesScroll.getLayoutParams().height = limit;
+        dialog.getBehavior().setSkipCollapsed(true);
+        dialog.getBehavior().setState(BottomSheetBehavior.STATE_EXPANDED);
+        dialog.show();
+        sheet = dialog;
+    }
+
+    /** The marketplace's HTML, restyled: headings take the title role, bullets the theme's colour. */
+    private CharSequence notes(String html) {
+        SpannableStringBuilder text = new SpannableStringBuilder(
+                Html.fromHtml(html, Html.FROM_HTML_SEPARATOR_LINE_BREAK_LIST_ITEM));
+        TypedValue title = new TypedValue();
+        getTheme().resolveAttribute(com.google.android.material.R.attr.textAppearanceTitleSmall, title, true);
+        for (RelativeSizeSpan heading : text.getSpans(0, text.length(), RelativeSizeSpan.class)) {
+            int start = text.getSpanStart(heading), end = text.getSpanEnd(heading);
+            text.removeSpan(heading);
+            for (StyleSpan bold : text.getSpans(start, end, StyleSpan.class)) {
+                if (text.getSpanStart(bold) == start && text.getSpanEnd(bold) == end) text.removeSpan(bold);
+            }
+            if (title.resourceId != 0) {
+                text.setSpan(new TextAppearanceSpan(this, title.resourceId), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+        }
+        if (Build.VERSION.SDK_INT >= 28) {
+            for (BulletSpan bullet : text.getSpans(0, text.length(), BulletSpan.class)) {
+                int start = text.getSpanStart(bullet), end = text.getSpanEnd(bullet);
+                text.removeSpan(bullet);
+                text.setSpan(new BulletSpan(ui.dimen(R.dimen.space_sm), ui.primary, ui.dimen(R.dimen.bullet_radius)),
+                        start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+        }
+        int end = text.length();
+        while (end > 0 && Character.isWhitespace(text.charAt(end - 1))) end--;
+        return text.subSequence(0, end);
     }
 
     // ------------------------------------------------------------------ export

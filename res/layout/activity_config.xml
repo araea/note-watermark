@@ -10,6 +10,8 @@
               field when the custom line is chosen. The preview sits right above the
               control that changes it.
     Export  - a single item: one filled button for the newer app, a tonal one for the other.
+    Update  - this app's version, said quietly, and whether it looks for new ones by itself.
+              A new version also gets its own card above everything else (item_update).
 -->
 <androidx.coordinatorlayout.widget.CoordinatorLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -70,6 +72,15 @@
                 android:paddingTop="@dimen/space_sm"
                 android:paddingRight="@dimen/page_gutter"
                 android:paddingBottom="@dimen/space_section">
+
+                <!-- ============================================== a new version, if any -->
+                <include
+                    android:id="@+id/updateItem"
+                    layout="@layout/item_update"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/space_lg"
+                    android:visibility="gone" />
 
                 <!-- ============================================================ status -->
                 <LinearLayout
@@ -473,13 +484,150 @@
                     </com.google.android.material.listitem.ListItemCardView>
                 </com.google.android.material.listitem.ListItemLayout>
 
+                <!-- ============================================================ update -->
                 <TextView
-                    android:id="@+id/versionLabel"
+                    android:id="@+id/updateSection"
+                    style="@style/Text.Sujian.Section"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingLeft="@dimen/space_lg"
+                    android:paddingTop="@dimen/space_xl"
+                    android:paddingRight="@dimen/space_lg"
+                    android:paddingBottom="@dimen/space_sm"
+                    android:text="@string/update_section" />
+
+                <LinearLayout
+                    android:id="@+id/updateGroup"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:divider="@drawable/segment_gap"
+                    android:orientation="vertical"
+                    android:showDividers="middle">
+
+                    <com.google.android.material.listitem.ListItemLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content">
+
+                        <com.google.android.material.listitem.ListItemCardView
+                            android:id="@+id/versionCard"
+                            style="@style/Widget.Sujian.Segment"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:clickable="true"
+                            android:focusable="true">
+
+                            <LinearLayout style="@style/Widget.Sujian.SegmentRow">
+
+                                <FrameLayout
+                                    android:layout_width="@dimen/list_leading"
+                                    android:layout_height="@dimen/list_leading"
+                                    android:importantForAccessibility="noHideDescendants">
+
+                                    <ImageView
+                                        android:id="@+id/versionIcon"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="match_parent"
+                                        android:padding="@dimen/space_sm" />
+
+                                    <com.google.android.material.loadingindicator.LoadingIndicator
+                                        android:id="@+id/versionLoading"
+                                        style="@style/Widget.Sujian.Loading"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="match_parent"
+                                        android:visibility="gone" />
+                                </FrameLayout>
+
+                                <LinearLayout
+                                    android:id="@+id/versionText"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginLeft="@dimen/space_lg"
+                                    android:layout_weight="1"
+                                    android:duplicateParentState="true"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:id="@+id/versionTitle"
+                                        style="@style/Widget.Sujian.Label"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content" />
+
+                                    <TextView
+                                        android:id="@+id/versionDetail"
+                                        style="@style/Widget.Sujian.Supporting"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content" />
+                                </LinearLayout>
+
+                                <ImageView
+                                    android:id="@+id/versionAction"
+                                    style="@style/Widget.Material3.ImageView.ListItem.TrailingIcon"
+                                    android:layout_width="@dimen/list_leading_glyph"
+                                    android:layout_height="@dimen/list_leading_glyph"
+                                    android:layout_marginLeft="@dimen/space_lg"
+                                    android:importantForAccessibility="no"
+                                    android:src="@drawable/ic_refresh" />
+                            </LinearLayout>
+                        </com.google.android.material.listitem.ListItemCardView>
+                    </com.google.android.material.listitem.ListItemLayout>
+
+                    <com.google.android.material.listitem.ListItemLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content">
+
+                        <com.jy.notewatermark.SwitchItem
+                            android:id="@+id/autoCard"
+                            style="@style/Widget.Sujian.Segment.Choice"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:clickable="true"
+                            android:focusable="true">
+
+                            <LinearLayout style="@style/Widget.Sujian.SegmentRow">
+
+                                <LinearLayout
+                                    android:id="@+id/autoText"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:duplicateParentState="true"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:id="@+id/autoTitle"
+                                        style="@style/Widget.Sujian.Label"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:text="@string/auto_title" />
+
+                                    <TextView
+                                        android:id="@+id/autoDetail"
+                                        style="@style/Widget.Sujian.Supporting"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content" />
+                                </LinearLayout>
+
+                                <com.google.android.material.materialswitch.MaterialSwitch
+                                    android:id="@+id/autoSwitch"
+                                    style="@style/Widget.Material3.Switch.ListItem"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginLeft="@dimen/space_lg"
+                                    android:importantForAccessibility="no" />
+                            </LinearLayout>
+                        </com.jy.notewatermark.SwitchItem>
+                    </com.google.android.material.listitem.ListItemLayout>
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/updateSource"
                     style="@style/Text.Sujian.Caption"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/space_section"
-                    android:gravity="center" />
+                    android:paddingLeft="@dimen/space_lg"
+                    android:paddingTop="@dimen/space_sm"
+                    android:paddingRight="@dimen/space_lg"
+                    android:text="@string/update_source" />
             </LinearLayout>
         </FrameLayout>
     </androidx.core.widget.NestedScrollView>

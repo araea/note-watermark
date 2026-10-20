@@ -113,4 +113,18 @@
         <item name="android:minHeight">@dimen/touch_target</item>
         <item name="android:singleLine">false</item>
     </style>
+
+    <!-- The update card's two actions; small, so they sit on one line at the card's end. -->
+    <style name="Widget.Sujian.Update" parent="Widget.Material3Expressive.Button">
+        <item name="android:minHeight">@dimen/touch_target</item>
+    </style>
+    <style name="Widget.Sujian.Update.Text" parent="Widget.Material3Expressive.Button.TextButton">
+        <item name="android:minHeight">@dimen/touch_target</item>
+    </style>
+
+    <!-- The release notes sheet. -->
+    <style name="Text.Sujian.Notes" parent="Text.Sujian.Body">
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:lineSpacingMultiplier">1.2</item>
+    </style>
 </resources>

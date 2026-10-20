@@ -1,5 +1,6 @@
 <resources>
     <!-- Spacing scale: every gap on the screen comes from one of these. -->
+    <dimen name="space_xs">4dp</dimen>
     <dimen name="space_sm">8dp</dimen>
     <dimen name="space_md">12dp</dimen>
     <dimen name="space_lg">16dp</dimen>
@@ -18,4 +19,5 @@
     <dimen name="loading_indicator">32dp</dimen>
     <dimen name="icon_inline">16dp</dimen>
     <dimen name="hairline">1dp</dimen>
+    <dimen name="bullet_radius">3dp</dimen>
 </resources>

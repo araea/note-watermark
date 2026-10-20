@@ -4,6 +4,17 @@
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
 
+    <!--
+        Updates: the screen looks up this module's page in the LSPosed module repository,
+        downloads the APK and hands it to the system installer. Nothing else goes online.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Keeps the daily check scheduled across reboots. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- The settings screen reaches the notes apps to check the hook and trigger an export. -->
     <queries>
         <package android:name="com.coloros.note" />
@@ -26,7 +37,8 @@
 
         <activity
             android:name=".ConfigActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -37,5 +49,18 @@
             android:name=".ConfigProvider"
             android:authorities="com.jy.notewatermark.settings"
             android:exported="true" />
+
+        <service
+            android:name=".UpdateJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <receiver
+            android:name=".UpdateReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A release's notes: the notes scroll, the actions stay put under them. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingBottom="@dimen/space_lg">
+
+    <com.google.android.material.bottomsheet.BottomSheetDragHandleView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <TextView
+        android:id="@+id/sheetTitle"
+        style="@style/Text.Sujian.Title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingLeft="@dimen/space_xl"
+        android:paddingRight="@dimen/space_xl" />
+
+    <TextView
+        android:id="@+id/sheetMeta"
+        style="@style/Text.Sujian.Caption"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_xs"
+        android:paddingLeft="@dimen/space_xl"
+        android:paddingRight="@dimen/space_xl" />
+
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/sheetScroll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_md"
+        android:scrollbarStyle="outsideOverlay"
+        android:scrollbars="vertical">
+
+        <TextView
+            android:id="@+id/sheetNotes"
+            style="@style/Text.Sujian.Notes"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingLeft="@dimen/space_xl"
+            android:paddingRight="@dimen/space_xl"
+            android:paddingBottom="@dimen/space_md"
+            android:textIsSelectable="true" />
+    </androidx.core.widget.NestedScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_sm"
+        android:gravity="end|center_vertical"
+        android:orientation="horizontal"
+        android:paddingLeft="@dimen/space_lg"
+        android:paddingRight="@dimen/space_lg">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/sheetPage"
+            style="@style/Widget.Sujian.Update.Text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/sheet_page" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/sheetUpdate"
+            style="@style/Widget.Sujian.Update"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="@dimen/space_sm"
+            android:text="@string/update_now" />
+    </LinearLayout>
+</LinearLayout>

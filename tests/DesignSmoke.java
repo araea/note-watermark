@@ -59,6 +59,7 @@ public final class DesignSmoke extends Instrumentation {
             checkShareAdapt();
             checkExportLinks();
             checkPaperShare();
+            checkRelease();
             preferences = getTargetContext().getSharedPreferences("settings", 0);
             original = preferences.getAll();
             preferences.edit().remove("watermark_text").remove("keep_blank_space")
@@ -240,12 +241,52 @@ public final class DesignSmoke extends Instrumentation {
             dark = true;
             launch();
             capture("dark", STATUS_ACTIVE);
+            pinUpdate(0, 0, "");
+            capture("dark-update", STATUS_ACTIVE);
             close();
             dark = false;
+
+            // The update card, pinned through each of its states.
+            launch();
+            pinUpdate(0, 0, "");
+            capture("light-update", STATUS_ACTIVE);
+            runOnMainSync(() -> {
+                check(view("updateItem").getVisibility() == View.VISIBLE, "a newer release gets its card");
+                check(text("updateTitle").getText().toString().contains("4.9.0"), "the card names the version");
+                check(text("updateDetail").getText().toString().equals("新增：一键更新 · 修复：导出偶尔中断"),
+                        "the card sums the release up by its section headings");
+                check(text("updateAction").getText().toString().equals("立即更新"), "one button to update");
+                check(view("updateAction").getHeight() >= dp(48) && view("updateNotes").getHeight() >= dp(48),
+                        "update targets >= 48dp");
+                check(text("versionDetail").getText().toString().contains("4.9.0"),
+                        "the version row points at the new version too");
+            });
+            pinUpdate(1, 2_000_000, "");
+            capture("light-update-downloading", STATUS_ACTIVE);
+            runOnMainSync(() -> {
+                check(view("updateProgress").getVisibility() == View.VISIBLE, "a download shows its progress");
+                check(text("updateAction").getText().toString().equals("取消"), "a download can be cancelled");
+            });
+            pinUpdate(2, 0, "");
+            capture("light-update-permission", STATUS_ACTIVE);
+            runOnMainSync(() -> check(text("updateAction").getText().toString().equals("去允许"),
+                    "a missing install permission leads to the setting"));
+            pinUpdate(0, 0, "安装包的签名与当前的素笺不同，没法覆盖安装");
+            capture("light-update-failed", STATUS_ACTIVE);
+            runOnMainSync(() -> {
+                check(text("updateAction").getText().toString().equals("重试"), "a failure offers a retry");
+                check(text("updateStatus").getText().toString().contains("签名"), "and says what went wrong");
+            });
+            close();
 
             fontScale = 2f;
             density = Math.round(getTargetContext().getResources().getDisplayMetrics().widthPixels / 320f * 160);
             launch();
+            runOnMainSync(() -> {
+                relayout(activity.getWindow().getDecorView());
+                checkTextBounds(activity.getWindow().getDecorView());
+            });
+            pinUpdate(1, 2_000_000, "");
             runOnMainSync(() -> {
                 relayout(activity.getWindow().getDecorView());
                 checkTextBounds(activity.getWindow().getDecorView());
@@ -568,6 +609,91 @@ public final class DesignSmoke extends Instrumentation {
         check(hidden.contains("--share-watermark-height:0px"), "hiding also gives back the room the footer reserved");
         check(blank.contains("visibility:hidden") && !blank.contains("--share-watermark-height:0px"),
                 "blank keeps the room");
+    }
+
+    /** A repository page in the shape modules.lsposed.org serves, newest first but out of order. */
+    private static final String PAGE = "{\"releases\":["
+            + "{\"tagName\":\"99-9.9.9\",\"isPrerelease\":true,\"releaseAssets\":[{\"name\":\"a.apk\","
+            + "\"downloadUrl\":\"https://x/a.apk\",\"size\":1}]},"
+            + "{\"tagName\":\"98-9.8.0\",\"isDraft\":true,\"releaseAssets\":[{\"name\":\"a.apk\","
+            + "\"downloadUrl\":\"https://x/a.apk\",\"size\":1}]},"
+            + "{\"tagName\":\"30-4.9.0\",\"publishedAt\":\"2026-10-20T03:00:00Z\","
+            + "\"descriptionHTML\":\"<h2>4.9.0 · 素笺</h2><h3>新增：一键更新</h3><p>说明</p>"
+            + "<h3>修复：导出偶尔中断</h3><h3>其他</h3><ul><li>零件</li></ul>\","
+            + "\"releaseAssets\":[{\"name\":\"NoteWatermark.apk\",\"size\":5600000,"
+            + "\"downloadUrl\":\"https://assets.lsposed.org/a.apk?sign=1\","
+            + "\"originalDownloadUrl\":\"https://github.com/a.apk\"}]},"
+            + "{\"tagName\":\"19-4.2.0\",\"releaseAssets\":[{\"name\":\"NoteWatermark.apk\","
+            + "\"downloadUrl\":\"https://x/b.apk\",\"size\":5}]},"
+            + "{\"tagName\":\"31-5.0.0\",\"releaseAssets\":[{\"name\":\"notes.txt\","
+            + "\"downloadUrl\":\"https://x/n.txt\",\"size\":5}]},"
+            + "{\"tagName\":\"32-5.1.0\",\"releaseAssets\":[{\"name\":\"NoteWatermark.apk\","
+            + "\"downloadUrl\":\"http://plain/a.apk\",\"size\":5}]}]}";
+
+    private Object release;
+
+    /** Reading the repository: what is offered, from where, and how it is summed up. */
+    private void checkRelease() throws Exception {
+        Class<?> type = Class.forName("com.jy.notewatermark.Release", true, getTargetContext().getClassLoader());
+        java.lang.reflect.Method parse = type.getDeclaredMethod("parse", String.class);
+        parse.setAccessible(true);
+        release = parse.invoke(null, PAGE);
+        check(release != null && (Long) field(release, "code") == 30L,
+                "the newest stable release with an APK is offered; drafts, pre-releases, other files and plain http are not");
+        check("4.9.0".equals(field(release, "version")), "the version name comes from the tag");
+        check("https://assets.lsposed.org/a.apk?sign=1".equals(field(release, "url"))
+                && "https://github.com/a.apk".equals(field(release, "fallback")),
+                "the repository's mirror is tried first, GitHub second");
+        check((Long) field(release, "published") == 1792465200000L, "the publish time is read as UTC");
+        java.lang.reflect.Method summary = type.getDeclaredMethod("summary");
+        summary.setAccessible(true);
+        check("新增：一键更新 · 修复：导出偶尔中断".equals(summary.invoke(release)),
+                "the summary keeps the headings that say what changed");
+        java.lang.reflect.Method body = type.getDeclaredMethod("body");
+        body.setAccessible(true);
+        check(((String) body.invoke(release)).startsWith("<h3>新增"), "the sheet drops the notes' own title");
+        java.lang.reflect.Method json = type.getDeclaredMethod("toJson");
+        java.lang.reflect.Method back = type.getDeclaredMethod("fromJson", String.class);
+        json.setAccessible(true);
+        back.setAccessible(true);
+        Object again = back.invoke(null, json.invoke(release));
+        check(again != null && field(again, "url").equals(field(release, "url"))
+                && field(again, "notes").equals(field(release, "notes")), "a saved release reads back the same");
+
+        java.lang.reflect.Method github = type.getDeclaredMethod("parseGitHub", String.class);
+        github.setAccessible(true);
+        Object fromGitHub = github.invoke(null, "{\"tag_name\":\"30-4.9.0\",\"body\":\"## 4.9.0 · 素笺\\n\\n"
+                + "### 新增：一键更新\\n\\n- **快**：`一次` 点按\\n- 二\\n\\n收尾 <b>\",\"assets\":[{\"name\":"
+                + "\"NoteWatermark.apk\",\"size\":9,\"browser_download_url\":\"https://github.com/a.apk\"}]}");
+        check(fromGitHub != null && (Long) field(fromGitHub, "code") == 30L, "GitHub's latest release is read too");
+        String notes = (String) field(fromGitHub, "notes");
+        check(notes.contains("<h3>新增：一键更新</h3>") && notes.contains("<li><strong>快</strong>：<code>一次</code> 点按</li>")
+                && notes.contains("</ul>\n<p>收尾 &lt;b&gt;</p>"), "its Markdown notes become the same HTML, escaped");
+        check("新增：一键更新".equals(summary.invoke(fromGitHub)), "and sum up the same way");
+    }
+
+    /** Shows the update card in a given state, detached from the real checks. */
+    private void pinUpdate(int phase, long done, String failure) {
+        runOnMainSync(() -> {
+            try {
+                ClassLoader loader = getTargetContext().getClassLoader();
+                Object updater = field(activity, "updater");
+                Class<?> listener = Class.forName("com.jy.notewatermark.Updater$Listener", true, loader);
+                java.lang.reflect.Method unlisten = updater.getClass().getDeclaredMethod("unlisten", listener);
+                unlisten.setAccessible(true);
+                unlisten.invoke(updater, field(activity, "updateListener"));
+                Class<?> state = Class.forName("com.jy.notewatermark.Updater$State", true, loader);
+                java.lang.reflect.Constructor<?> make = state.getDeclaredConstructor(release.getClass(), boolean.class,
+                        boolean.class, long.class, String.class, int.class, long.class, long.class, String.class,
+                        String.class, Intent.class);
+                make.setAccessible(true);
+                set(activity, "update", make.newInstance(release, true, false, System.currentTimeMillis(), "",
+                        phase, done, 5_600_000L, failure, "", null));
+                invoke(activity, "renderUpdate");
+            } catch (Exception error) {
+                throw new RuntimeException(error);
+            }
+        });
     }
 
     public enum Style { SIMPLE, CLASSIC }
